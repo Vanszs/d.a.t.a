@@ -1,225 +1,245 @@
 import {
-    composeContext,
-    generateObjectDeprecated,
-    ModelClass,
     Action,
-    elizaLogger,
-    type IAgentRuntime,
-    type Memory,
-    type State,
     HandlerCallback,
+    IAgentRuntime,
+    Memory,
+    State,
+    elizaLogger,
+    composeContext,
+    generateObject,
+    ModelClass,
 } from "@elizaos/core";
+import {
+    DatabaseProvider,
+    databaseProvider,
+} from "../providers/ethereum/database";
+import { fetchTransactionTemplate } from "../templates";
 
-// Define the parameters schema for transaction queries
+// Query parameter interface with stricter types
 interface FetchTransactionParams {
-    limit?: number;
     address?: string;
-    startBlock?: number;
-    endBlock?: number;
-    startTime?: string;
-    endTime?: string;
-    orderBy?: "timestamp" | "blockNumber" | "value" | "gasUsed";
-    orderDirection?: "ASC" | "DESC";
+    startDate?: string;
+    endDate?: string;
     minValue?: string;
     maxValue?: string;
-    status?: boolean;
-    tokenAddress?: string;
+    limit?: number;
+    orderBy?: "block_timestamp" | "value" | "gas_price";
+    orderDirection?: "ASC" | "DESC";
 }
 
-const buildQueryDetails = async (
-    state: State,
-    runtime: IAgentRuntime,
-    message: Memory
-): Promise<FetchTransactionParams> => {
-    // Parse the message context to extract query parameters
-    const context = message.content.text.toLowerCase();
-    const params: FetchTransactionParams = {
-        limit: 10, // default limit
-        orderBy: "timestamp",
-        orderDirection: "DESC",
+// Response interface with enhanced metadata
+interface TransactionQueryResult {
+    success: boolean;
+    data: any[];
+    metadata: {
+        total: number;
+        queryTime: string;
+        queryType: "transaction" | "token" | "aggregate" | "unknown";
+        executionTime: number;
+        cached: boolean;
+        queryDetails?: {
+            params: FetchTransactionParams;
+            query: string;
+            paramValidation?: string[];
+        };
     };
+    error?: {
+        code: string;
+        message: string;
+        details?: any;
+    };
+}
 
-    const limitPatterns = [
-        /(?:get|fetch|show|display)\s+(\d+)\s+transactions/,
-        /last\s+(\d+)\s+transactions/,
-        /recent\s+(\d+)\s+transactions/,
-        /(\d+)\s+latest\s+transactions/,
-    ];
+export class FetchTransactionAction {
+    constructor(private dbProvider: DatabaseProvider) { }
 
-    for (const pattern of limitPatterns) {
-        const match = context.match(pattern);
-        if (match) {
-            params.limit = parseInt(match[1]);
-            break;
+    private validateParams(params: FetchTransactionParams): string[] {
+        const validationMessages: string[] = [];
+
+        // Date format validation
+        const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+        if (params.startDate && !dateRegex.test(params.startDate)) {
+            validationMessages.push(
+                `Invalid start date format: ${params.startDate}`
+            );
+        }
+        if (params.endDate && !dateRegex.test(params.endDate)) {
+            validationMessages.push(
+                `Invalid end date format: ${params.endDate}`
+            );
+        }
+
+        // Address format validation
+        if (params.address && !/^0x[a-fA-F0-9]{40}$/.test(params.address)) {
+            validationMessages.push(
+                `Invalid address format: ${params.address}`
+            );
+        }
+
+        // Value validation
+        if (params.minValue && isNaN(parseFloat(params.minValue))) {
+            validationMessages.push(
+                `Invalid minimum value: ${params.minValue}`
+            );
+        }
+        if (params.maxValue && isNaN(parseFloat(params.maxValue))) {
+            validationMessages.push(
+                `Invalid maximum value: ${params.maxValue}`
+            );
+        }
+
+        // Limit validation
+        if (params.limit) {
+            if (isNaN(params.limit)) {
+                validationMessages.push(`Invalid limit: must be a number`);
+            } else if (params.limit < 1 || params.limit > 100) {
+                validationMessages.push(
+                    `Invalid limit: ${params.limit}. Must be between 1 and 100`
+                );
+            }
+        }
+
+        // Order validation
+        const validOrderBy = ["block_timestamp", "value", "gas_price"];
+        if (params.orderBy && !validOrderBy.includes(params.orderBy)) {
+            validationMessages.push(
+                `Invalid orderBy: ${params.orderBy}. Must be one of: ${validOrderBy.join(
+                    ", "
+                )}`
+            );
+        }
+
+        const validOrderDirection = ["ASC", "DESC"];
+        if (
+            params.orderDirection &&
+            !validOrderDirection.includes(params.orderDirection)
+        ) {
+            validationMessages.push(
+                `Invalid orderDirection: ${params.orderDirection
+                }. Must be one of: ${validOrderDirection.join(", ")}`
+            );
+        }
+
+        return validationMessages;
+    }
+
+    private buildSqlQuery(params: FetchTransactionParams): string {
+        const conditions: string[] = [];
+
+        // Add time range condition
+        if (!params.startDate) {
+            conditions.push(
+                "date_parse(date, '%Y-%m-%d') >= date_add('month', -3, current_date)"
+            );
+        } else {
+            conditions.push(`date >= '${params.startDate}'`);
+            if (params.endDate) {
+                conditions.push(`date <= '${params.endDate}'`);
+            }
+        }
+
+        // Add address condition
+        if (params.address) {
+            conditions.push(
+                `(from_address = '${params.address}' OR to_address = '${params.address}')`
+            );
+        }
+
+        // Add value conditions
+        if (params.minValue) {
+            // Convert ETH to Wei for comparison
+            const minValueWei = (parseFloat(params.minValue) * 1e18).toString();
+            conditions.push(`value >= ${minValueWei}`);
+        }
+        if (params.maxValue) {
+            const maxValueWei = (parseFloat(params.maxValue) * 1e18).toString();
+            conditions.push(`value <= ${maxValueWei}`);
+        }
+
+        // Build the final query
+        const query = `
+            SELECT
+                hash,
+                block_number,
+                block_timestamp,
+                from_address,
+                to_address,
+                value / 1e18 as value_eth,
+                gas,
+                gas_price
+            FROM eth.transactions
+            WHERE ${conditions.join(" AND ")}
+            ORDER BY ${params.orderBy || "block_timestamp"} ${params.orderDirection || "DESC"
+            }
+            LIMIT ${params.limit || 10}
+        `;
+
+        return query.trim();
+    }
+
+    public async fetchTransactions(
+        message: string,
+        runtime: IAgentRuntime,
+        state: State
+    ): Promise<TransactionQueryResult> {
+        try {
+            // Parse parameters using LLM
+            const context = composeContext({
+                state,
+                template: fetchTransactionTemplate,
+            });
+
+            const paramsJson = (await generateObject({
+                runtime,
+                context,
+                modelClass: ModelClass.SMALL,
+            })) as FetchTransactionParams;
+
+            // Validate parameters
+            const validationMessages = this.validateParams(paramsJson);
+            if (validationMessages.length > 0) {
+                throw new Error(validationMessages.join("; "));
+            }
+
+            // Build and execute query
+            const sqlQuery = this.buildSqlQuery(paramsJson);
+            elizaLogger.log("Generated SQL query:", sqlQuery);
+
+            const result = (await this.dbProvider.query(
+                sqlQuery
+            )) as TransactionQueryResult;
+
+            // Enhance result with query details
+            if (result.success) {
+                result.metadata.queryDetails = {
+                    params: paramsJson,
+                    query: sqlQuery,
+                    paramValidation: validationMessages,
+                };
+            }
+
+            return result;
+        } catch (error) {
+            elizaLogger.error("Error fetching transactions:", error);
+            return {
+                success: false,
+                data: [],
+                metadata: {
+                    total: 0,
+                    queryTime: new Date().toISOString(),
+                    queryType: "transaction",
+                    executionTime: 0,
+                    cached: false,
+                },
+                error: {
+                    code: "FETCH_ERROR",
+                    message: error.message,
+                    details: error,
+                },
+            };
         }
     }
-
-    const addressPatterns = [
-        /address[:\s]+([0x][a-fA-F0-9]{40})/,
-        /wallet[:\s]+([0x][a-fA-F0-9]{40})/,
-        /account[:\s]+([0x][a-fA-F0-9]{40})/,
-        /from[:\s]+([0x][a-fA-F0-9]{40})/,
-        /to[:\s]+([0x][a-fA-F0-9]{40})/,
-    ];
-
-    for (const pattern of addressPatterns) {
-        const match = context.match(pattern);
-        if (match) {
-            params.address = match[1];
-            break;
-        }
-    }
-
-    const blockPatterns = [
-        /block[s]?\s+(\d+)\s+to\s+(\d+)/,
-        /from\s+block\s+(\d+)\s+to\s+(\d+)/,
-        /between\s+block[s]?\s+(\d+)\s+and\s+(\d+)/,
-    ];
-
-    for (const pattern of blockPatterns) {
-        const match = context.match(pattern);
-        if (match) {
-            params.startBlock = parseInt(match[1]);
-            params.endBlock = parseInt(match[2]);
-            break;
-        }
-    }
-
-    const timePatterns = [
-        /(?:in|from|since|after)\s+(yesterday|last week|last month|last year)/,
-        /(?:from|since|after)\s+(\d{4}-\d{2}-\d{2})/,
-        /between\s+(\d{4}-\d{2}-\d{2})\s+and\s+(\d{4}-\d{2}-\d{2})/,
-    ];
-
-    // for (const pattern of timePatterns) {
-    //     const match = context.match(pattern);
-    //     if (match) {
-    //         if (match[1] === "yesterday") {
-    //             params.startTime = new Date(
-    //                 Date.now() - 86400000
-    //             ).toISOString();
-    //         } else if (match[1] === "last week") {
-    //             params.startTime = new Date(
-    //                 Date.now() - 7 * 86400000
-    //             ).toISOString();
-    //         } else if (match[1] === "last month") {
-    //             params.startTime = new Date(
-    //                 Date.now() - 30 * 86400000
-    //             ).toISOString();
-    //         } else if (match[1] === "last year") {
-    //             params.startTime = new Date(
-    //                 Date.now() - 365 * 86400000
-    //             ).toISOString();
-    //         } else if (match[2]) {
-    //             params.startTime = new Date(match[1]).toISOString();
-    //             params.endTime = new Date(match[2]).toISOString();
-    //         }
-    //         break;
-    //     }
-    // }
-
-    // const valuePatterns = [
-    //     /(?:above|more than|>)\s*(\d+(?:\.\d+)?)\s*(eth|ether)/i,
-    //     /(?:below|less than|<)\s*(\d+(?:\.\d+)?)\s*(eth|ether)/i,
-    //     /between\s*(\d+(?:\.\d+)?)\s*and\s*(\d+(?:\.\d+)?)\s*(eth|ether)/i,
-    // ];
-
-    // for (const pattern of valuePatterns) {
-    //     const match = context.match(pattern);
-    //     if (match) {
-    //         const value = parseFloat(match[1]);
-    //         if (pattern.source.includes("above|more than|>")) {
-    //             params.minValue = (value * 1e18).toString(); // Convert ETH to Wei
-    //         } else if (pattern.source.includes("below|less than|<")) {
-    //             params.maxValue = (value * 1e18).toString();
-    //         } else if (match[2]) {
-    //             params.minValue = (value * 1e18).toString();
-    //             params.maxValue = (parseFloat(match[2]) * 1e18).toString();
-    //         }
-    //         break;
-    //     }
-    // }
-
-    // if (context.includes("failed") || context.includes("unsuccessful")) {
-    //     params.status = false;
-    // } else if (
-    //     context.includes("successful") ||
-    //     context.includes("confirmed")
-    // ) {
-    //     params.status = true;
-    // }
-
-    // if (context.includes("highest value") || context.includes("largest")) {
-    //     params.orderBy = "value";
-    //     params.orderDirection = "DESC";
-    // } else if (
-    //     context.includes("smallest") ||
-    //     context.includes("lowest value")
-    // ) {
-    //     params.orderBy = "value";
-    //     params.orderDirection = "ASC";
-    // } else if (
-    //     context.includes("highest gas") ||
-    //     context.includes("most expensive")
-    // ) {
-    //     params.orderBy = "gasUsed";
-    //     params.orderDirection = "DESC";
-    // }
-
-    return params;
-};
-
-const constructSqlQuery = (params: FetchTransactionParams): string => {
-    let query = "SELECT * FROM ethereum_transactions";
-    const conditions: string[] = [];
-
-    if (params.address) {
-        conditions.push(
-            `(from_address = '${params.address}' OR to_address = '${params.address}')`
-        );
-    }
-
-    if (params.startBlock) {
-        conditions.push(`block_number >= ${params.startBlock}`);
-    }
-
-    if (params.endBlock) {
-        conditions.push(`block_number <= ${params.endBlock}`);
-    }
-
-    if (params.startTime) {
-        conditions.push(`block_timestamp >= '${params.startTime}'`);
-    }
-
-    if (params.endTime) {
-        conditions.push(`block_timestamp <= '${params.endTime}'`);
-    }
-
-    if (params.minValue) {
-        conditions.push(`value >= '${params.minValue}'`);
-    }
-
-    if (params.maxValue) {
-        conditions.push(`value <= '${params.maxValue}'`);
-    }
-
-    if (params.status !== undefined) {
-        conditions.push(`status = ${params.status}`);
-    }
-
-    if (params.tokenAddress) {
-        conditions.push(`token_address = '${params.tokenAddress}'`);
-    }
-
-    if (conditions.length > 0) {
-        query += " WHERE " + conditions.join(" AND ");
-    }
-
-    query += ` ORDER BY ${params.orderBy} ${params.orderDirection}`;
-    query += ` LIMIT ${params.limit}`;
-
-    return query;
-};
+}
 
 export const fetchTransactionAction: Action = {
     name: "fetch_transactions",
@@ -235,11 +255,6 @@ export const fetchTransactionAction: Action = {
         "list transactions",
         "recent transactions",
         "transaction history",
-        "transfer records",
-        "eth movements",
-        "wallet activity",
-        "transaction lookup",
-        "transfer search",
     ],
     examples: [
         [
@@ -264,33 +279,16 @@ export const fetchTransactionAction: Action = {
             {
                 user: "user",
                 content: {
-                    text: "Show me transactions above 10 ETH from last week",
-                    action: "FETCH_TRANSACTIONS",
-                },
-            },
-        ],
-        [
-            {
-                user: "user",
-                content: {
-                    text: "Find failed transactions with highest gas fees",
-                    action: "FETCH_TRANSACTIONS",
-                },
-            },
-        ],
-        [
-            {
-                user: "user",
-                content: {
-                    text: "Show me transactions between blocks 1000000 and 1000100",
+                    text: "Find transactions above 1 ETH from last month",
                     action: "FETCH_TRANSACTIONS",
                 },
             },
         ],
     ],
     validate: async (runtime: IAgentRuntime) => {
-        // Add any necessary validation
-        return true;
+        const apiKey = runtime.getSetting("DATA_API_KEY");
+        const authToken = runtime.getSetting("DATA_AUTH_TOKEN");
+        return !!(apiKey && authToken);
     },
     handler: async (
         runtime: IAgentRuntime,
@@ -300,33 +298,49 @@ export const fetchTransactionAction: Action = {
         callback?: HandlerCallback
     ) => {
         try {
-            elizaLogger.log("Fetching Ethereum transactions...");
-            elizaLogger.log("message", message);
+            const provider = databaseProvider(runtime);
+            const action = new FetchTransactionAction(provider);
 
-            // Build query parameters from message context
-            const queryParams = await buildQueryDetails(
-                state,
+            const result = await action.fetchTransactions(
+                message.content.text,
                 runtime,
-                message
+                state
             );
 
-            // Construct SQL query
-            const sqlQuery = constructSqlQuery(queryParams);
-            elizaLogger.log("Generated SQL query:", sqlQuery);
-
-            // Here we return the constructed query for the AI to use
-            // The actual database query will be handled by the database provider
             if (callback) {
-                callback({
-                    text: `Here's the SQL query to retrieve Ethereum transactions:\n${sqlQuery}\nThis query will return the specified transactions, including details like transaction hash, block number, sender/receiver addresses, value, and gas used. Let me know if you'd like further analysis or specific details about any of these transactions!`,
-                    content: {
-                        success: true,
-                        query: sqlQuery,
-                        params: queryParams,
-                    },
-                });
+                if (result.success) {
+                    const params = result.metadata.queryDetails?.params;
+                    let details = "";
+                    if (params) {
+                        details = `
+- Address: ${params.address || "any"}
+- Date Range: ${params.startDate || "last 3 months"} to ${params.endDate || "now"
+                            }
+- Value Range: ${params.minValue ? `>${params.minValue} ETH` : "any"} ${params.maxValue ? `to <${params.maxValue} ETH` : ""
+                            }
+- Showing: ${params.limit || 10} transactions
+- Ordered by: ${params.orderBy || "timestamp"} ${params.orderDirection || "DESC"
+                            }`;
+                    }
+
+                    callback({
+                        text: `Found ${result.metadata.total
+                            } transactions with the following criteria:${details}\n\nHere are the details:`,
+                        content: {
+                            success: true,
+                            data: result.data,
+                            metadata: result.metadata,
+                        },
+                    });
+                } else {
+                    callback({
+                        text: `Error fetching transactions: ${result.error?.message}`,
+                        content: { error: result.error },
+                    });
+                }
             }
-            return true;
+
+            return result.success;
         } catch (error) {
             elizaLogger.error("Error in fetch transaction action:", error);
             if (callback) {

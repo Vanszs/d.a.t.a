@@ -4,414 +4,628 @@ import {
     Memory,
     State,
     elizaLogger,
-    embed,
-    trimTokens,
+    generateMessageResponse,
+    ModelClass,
+    stringToUuid,
+    getEmbeddingZeroVector,
 } from "@elizaos/core";
 
-export const queryResolutionTemplate = `#
-Database Schema
-CREATE EXTERNAL TABLE blocks(
-  timestamp timestamp,
-  number bigint,
-  hash string,
-  parent_hash string,
-  nonce string,
-  sha3_uncles string,
-  logs_bloom string,
-  transactions_root string,
-  state_root string,
-  receipts_root string,
-  miner string,
-  difficulty double,
-  total_difficulty double,
-  size bigint,
-  extra_data string,
-  gas_limit bigint,
-  gas_used bigint,
-  transaction_count bigint,
-  base_fee_per_gas bigint)
-PARTITIONED BY (
-  date string)
-ROW FORMAT SERDE
-  'org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe'
-STORED AS INPUTFORMAT
-  'org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat'
-OUTPUTFORMAT
-  'org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat'
-TBLPROPERTIES (
-);
-CREATE EXTERNAL TABLE contracts(
-  address string,
-  bytecode string,
-  block_timestamp timestamp,
-  block_number bigint,
-  block_hash string)
-PARTITIONED BY (
-  date string)
-ROW FORMAT SERDE
-  'org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe'
-STORED AS INPUTFORMAT
-  'org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat'
-OUTPUTFORMAT
-  'org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat'
-TBLPROPERTIES (
-);
-CREATE EXTERNAL TABLE logs(
-  log_index bigint,
-  transaction_hash string,
-  transaction_index bigint,
-  address string,
-  data string,
-  topics array<string>,
-  block_timestamp timestamp,
-  block_number bigint,
-  block_hash string)
-PARTITIONED BY (
-  date string)
-ROW FORMAT SERDE
-  'org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe'
-STORED AS INPUTFORMAT
-  'org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat'
-OUTPUTFORMAT
-  'org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat'
-TBLPROPERTIES (
-);
-CREATE EXTERNAL TABLE token_transfers(
-  token_address string,
-  from_address string,
-  to_address string,
-  value double,
-  transaction_hash string,
-  log_index bigint,
-  block_timestamp timestamp,
-  block_number bigint,
-  block_hash string)
-PARTITIONED BY (
-  date string)
-ROW FORMAT SERDE
-  'org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe'
-STORED AS INPUTFORMAT
-  'org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat'
-OUTPUTFORMAT
-  'org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat'
-LOCATION
-  's3://aws-public-blockchain/v1.0/eth/token_transfers'
-TBLPROPERTIES (
-);
-CREATE EXTERNAL TABLE traces(
-  transaction_hash string,
-  transaction_index bigint,
-  from_address string,
-  to_address string,
-  value double,
-  input string,
-  output string,
-  trace_type string,
-  call_type string,
-  reward_type string,
-  gas double,
-  gas_used double,
-  subtraces bigint,
-  trace_address string,
-  error string,
-  status bigint,
-  block_timestamp timestamp,
-  block_number bigint,
-  block_hash string,
-  trace_id string)
-PARTITIONED BY (
-  date string)
-ROW FORMAT SERDE
-  'org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe'
-STORED AS INPUTFORMAT
-  'org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat'
-OUTPUTFORMAT
-  'org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat'
-LOCATION
-  's3://aws-public-blockchain/v1.0/eth/traces'
-TBLPROPERTIES (
-);
-CREATE EXTERNAL TABLE transactions(
-  hash string,
-  nonce bigint,
-  transaction_index bigint,
-  from_address string,
-  to_address string,
-  value double,
-  gas bigint,
-  gas_price bigint,
-  input string,
-  receipt_cumulative_gas_used bigint,
-  receipt_gas_used bigint,
-  receipt_contract_address string,
-  receipt_root string,
-  receipt_status bigint,
-  block_timestamp timestamp,
-  block_number bigint,
-  block_hash string,
-  max_fee_per_gas bigint,
-  max_priority_fee_per_gas bigint,
-  transaction_type bigint,
-  receipt_effective_gas_price bigint)
-PARTITIONED BY (
-  date string)
-ROW FORMAT SERDE
-  'org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe'
-STORED AS INPUTFORMAT
-  'org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat'
-OUTPUTFORMAT
-  'org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat'
-LOCATION
-  's3://aws-public-blockchain/v1.0/eth/transactions'
-TBLPROPERTIES (
-);
-
-# Query Examples
-Example 1:
-SELECT COUNT(*) AS token_transfers
-FROM eth.token_transfers
-WHERE block_timestamp >= TIMESTAMP '2024-05-20'
-AND block_timestamp < TIMESTAMP '2024-05-21'
-AND lower(token_address) = lower('0x514910771AF9Ca656af840dff83E8264EcF986CA');
-
-Example 2:
-SELECT * FROM eth.blocks WHERE date='2024-03-11';
-
-Example 3:
-SELECT date, SUM(gas_used) AS total_gas_used
-FROM eth.blocks
-GROUP BY date
-ORDER BY date DESC;
-
-Example 4:
-SELECT hash, value
-FROM eth.transactions
-WHERE block_timestamp >= TIMESTAMP '2024-05-16'
-AND block_timestamp < TIMESTAMP '2024-05-17'
-ORDER BY value DESC
-LIMIT 1;
-
-# User's Query
-{{userQuery}}
-
-# Instructions:
-1. **Determine if a Query is Needed**:
-   - Analyze the user's query to decide if it requires retrieving data or if it can be answered directly without a query.
-   - If no query is needed, return a response with a message explaining why (e.g., "The query does not request any specific data.").
-2. **Determine the Query Objective**:
-   - If a query is needed, identify the goal (e.g., "Count transactions", "Fetch gas usage", etc.).
-   - Extract specific filters or conditions, such as time ranges, addresses, or other parameters, from the user's query.
-3. **Identify the Blockchain Network**:
-   - If the user specifies a network, resolve it.
-   - If the network is not specified, default to "Ethereum".
-   - If the network is not "Ethereum", generate a response indicating that only Ethereum is supported.
-4. **Generate SQL Queries**:
-   - Use the provided schema and query examples to structure SQL queries that meet the user's objective.
-   - Ensure the SQL queries align with the schema's fields and structure.
-   - If the query requires multiple SQL queries, generate all necessary queries and explain how the results should be combined.
-5. **Generate Other Data Source Instructions**:
-   - If applicable, include instructions for metrics, external APIs, or vector searches.
-6. **Format the Output**:
-   - Return a JSON response with the following fields:
-     - 'status': A string that indicates success or failure.
-     - 'network': The resolved blockchain network.
-     - 'dataSources': A list of queries or instructions, each with:
-       - 'type': The type of query (e.g., "sql", "metrics", "unsupported_network").
-       - 'data': The query or instruction to execute.
-       - 'resultFormat': A string that specifies how the result should be formatted, including the network.
-
-# Response Format:
-\`\`\`json
-{
-  "status": "success",
-  "network": "{{resolvedNetwork}}",
-  "dataSources": [
-    {
-      "type": "{{queryType}}",
-      "data": "{{queryOrMessage}}",
-      "resultFormat": "{{label}} ({{network}}): {{result}}"
-    }
-  ]
+// API response interface for query results
+interface IQueryResult {
+    success: boolean;
+    data: any[];
+    metadata: {
+        total: number;
+        queryTime: string;
+        queryType: "transaction" | "token" | "aggregate" | "unknown";
+        executionTime: number;
+        cached: boolean;
+        pagination?: {
+            currentPage: number;
+            totalPages: number;
+            hasMore: boolean;
+        };
+    };
+    error?: {
+        code: string;
+        message: string;
+        details?: any;
+    };
 }
-\`\`\`
+// API response interface
+interface IApiResponse {
+    code: number;
+    msg: string;
+    data: {
+        column_infos: string[];
+        rows: {
+            items: (string | number)[];
+        }[];
+    };
+}
 
-# Examples:
-## Example 1: User Query Requiring Two SQL Queries
-User Query: "What is the total gas used yesterday, and how many transactions happened yesterday?"
+export class DatabaseProvider {
+    private chain: string;
+    private readonly API_URL: string;
+    private readonly AUTH_TOKEN: string;
 
-Parsed Query Objective: "Fetch the total gas used in Ethereum blocks yesterday and count the total number of transactions yesterday."
+    constructor(chain: string, runtime: IAgentRuntime) {
+        this.chain = chain;
+        this.API_URL = runtime.getSetting("DATA_API_KEY");
+        this.AUTH_TOKEN = runtime.getSetting("DATA_AUTH_TOKEN");
+    }
 
-Response:
-\`\`\`json
-{
-  "status": "success",
-  "network": "Ethereum",
-  "dataSources": [
-    {
-      "type": "sql",
-      "data": "SELECT SUM(gas_used) AS total_gas_used FROM eth.blocks WHERE block_timestamp >= TIMESTAMP '2024-12-01 00:00:00' AND block_timestamp < TIMESTAMP '2024-12-02 00:00:00';",
-      "resultFormat": "total_gas_used (Ethereum): {{result}}"
+    public extractSQLQuery(preResponse: any): string | null {
+        try {
+            // Try to parse if input is string
+            let jsonData = preResponse;
+            if (typeof preResponse === "string") {
+                try {
+                    jsonData = JSON.parse(preResponse);
+                } catch (e) {
+                    elizaLogger.error(
+                        "Failed to parse preResponse as JSON:",
+                        e
+                    );
+                    return null;
+                }
+            }
+
+            // Function to recursively search for SQL query in object
+            const findSQLQuery = (obj: any): string | null => {
+                // Base cases
+                if (!obj) return null;
+
+                // If string, check if it's a SQL query
+                if (typeof obj === "string") {
+                    const sqlPattern = /^\s*(SELECT|WITH)\s+[\s\S]+?(?:;|$)/i;
+                    const commentPattern = /--.*$|\/\*[\s\S]*?\*\//gm;
+
+                    // Clean and check the string
+                    const cleanStr = obj.replace(commentPattern, "").trim();
+                    if (sqlPattern.test(cleanStr)) {
+                        // Validate SQL safety
+                        const unsafeKeywords = [
+                            "drop",
+                            "delete",
+                            "update",
+                            "insert",
+                            "alter",
+                            "create",
+                        ];
+                        const isUnsafe = unsafeKeywords.some((keyword) =>
+                            cleanStr.toLowerCase().includes(keyword)
+                        );
+
+                        if (!isUnsafe) {
+                            return cleanStr;
+                        }
+                    }
+                    return null;
+                }
+
+                // If array, search each element
+                if (Array.isArray(obj)) {
+                    for (const item of obj) {
+                        const result = findSQLQuery(item);
+                        if (result) return result;
+                    }
+                    return null;
+                }
+
+                // If object, search each value
+                if (typeof obj === "object") {
+                    for (const key of Object.keys(obj)) {
+                        // Prioritize 'query' field in sql object
+                        if (key.toLowerCase() === "query" && obj.sql) {
+                            const result = findSQLQuery(obj[key]);
+                            if (result) return result;
+                        }
+                    }
+
+                    // Search other fields
+                    for (const key of Object.keys(obj)) {
+                        const result = findSQLQuery(obj[key]);
+                        if (result) return result;
+                    }
+                }
+
+                return null;
+            };
+
+            // Start the search
+            const sqlQuery = findSQLQuery(jsonData);
+
+            if (!sqlQuery) {
+                elizaLogger.warn("No valid SQL query found in preResponse");
+                return null;
+            }
+            return sqlQuery;
+        } catch (error) {
+            elizaLogger.error("Error in extractSQLQuery:", error);
+            return null;
+        }
+    }
+
+    private async sendSqlQuery(sql: string): Promise<IApiResponse> {
+        try {
+            const response = await fetch(this.API_URL, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    Authorization: this.AUTH_TOKEN,
+                },
+                body: JSON.stringify({
+                    sql_content: sql,
+                }),
+            });
+
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            const data = await response.json();
+            return data as IApiResponse;
+        } catch (error) {
+            elizaLogger.error("Error sending SQL query to API:", error);
+            throw error;
+        }
+    }
+
+    // Transform API response data
+    private transformApiResponse(apiResponse: IApiResponse): any[] {
+        const { column_infos, rows } = apiResponse.data;
+
+        return rows.map((row) => {
+            const rowData: Record<string, any> = {};
+            row.items.forEach((value, index) => {
+                const columnName = column_infos[index];
+                rowData[columnName] = value;
+            });
+            return rowData;
+        });
+    }
+
+    // Execute query
+    private async executeQuery(sql: string): Promise<IQueryResult> {
+        try {
+            // Validate query
+            if (!sql || sql.length > 5000) {
+                throw new Error("Invalid SQL query length");
+            }
+
+            const queryType = sql.toLowerCase().includes("token_transfers")
+                ? "token"
+                : sql.toLowerCase().includes("count")
+                    ? "aggregate"
+                    : "transaction";
+
+            // Send query to API
+            const apiResponse = await this.sendSqlQuery(sql);
+
+            // Check API response status
+            if (apiResponse.code !== 0) {
+                throw new Error(`API Error: ${apiResponse.msg}`);
+            }
+
+            // Transform data
+            const transformedData = this.transformApiResponse(apiResponse);
+
+            const queryResult: IQueryResult = {
+                success: true,
+                data: transformedData,
+                metadata: {
+                    total: transformedData.length,
+                    queryTime: new Date().toISOString(),
+                    queryType: queryType as
+                        | "token"
+                        | "aggregate"
+                        | "transaction",
+                    executionTime: 0,
+                    cached: false,
+                },
+            };
+
+            return queryResult;
+        } catch (error) {
+            elizaLogger.error("Query execution failed:", error);
+            return {
+                success: false,
+                data: [],
+                metadata: {
+                    total: 0,
+                    queryTime: new Date().toISOString(),
+                    queryType: "unknown",
+                    executionTime: 0,
+                    cached: false,
+                },
+                error: {
+                    code: error.code || "EXECUTION_ERROR",
+                    message: error.message || "Unknown error occurred",
+                    details: error,
+                },
+            };
+        }
+    }
+
+    public async query(sql: string): Promise<IQueryResult> {
+        return this.executeQuery(sql);
+    }
+
+    getDatabaseSchema(): string {
+        return `
+        CREATE EXTERNAL TABLE transactions(
+            hash string,
+            nonce bigint,
+            block_hash string,
+            block_number bigint,
+            block_timestamp timestamp,
+            date string,
+            transaction_index bigint,
+            from_address string,
+            to_address string,
+            value double,
+            gas bigint,
+            gas_price bigint,
+            input string,
+            max_fee_per_gas bigint,
+            max_priority_fee_per_gas bigint,
+            transaction_type bigint
+        ) PARTITIONED BY (date string)
+        ROW FORMAT SERDE 'org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe'
+        STORED AS INPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat'
+        OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat';
+
+        CREATE EXTERNAL TABLE token_transfers(
+            token_address string,
+            from_address string,
+            to_address string,
+            value double,
+            transaction_hash string,
+            log_index bigint,
+            block_timestamp timestamp,
+            date string,
+            block_number bigint,
+            block_hash string
+        ) PARTITIONED BY (date string)
+        ROW FORMAT SERDE 'org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe'
+        STORED AS INPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat'
+        OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat';
+        `;
+    }
+
+    getQueryExamples(): string {
+        return `
+        Common Query Examples:
+
+        1. Find Most Active Addresses in Last 7 Days:
+        WITH address_activity AS (
+            SELECT
+                from_address AS address,
+                COUNT(*) AS tx_count
+            FROM
+                eth.transactions
+            WHERE date_parse(date, '%Y-%m-%d') >= date_add('day', -7, current_date)
+            GROUP BY
+                from_address
+            UNION ALL
+            SELECT
+                to_address AS address,
+                COUNT(*) AS tx_count
+            FROM
+                eth.transactions
+            WHERE
+                date_parse(date, '%Y-%m-%d') >= date_add('day', -7, current_date)
+            GROUP BY
+                to_address
+        )
+        SELECT
+            address,
+            SUM(tx_count) AS total_transactions
+        FROM
+            address_activity
+        GROUP BY
+            address
+        ORDER BY
+            total_transactions DESC
+        LIMIT 10;
+
+        2. Analyze Address Transaction Statistics (Last 30 Days):
+        WITH recent_transactions AS (
+            SELECT
+                from_address,
+                to_address,
+                value,
+                block_timestamp,
+                CASE
+                    WHEN from_address = :address THEN 'outgoing'
+                    WHEN to_address = :address THEN 'incoming'
+                    ELSE 'other'
+                END AS transaction_type
+            FROM eth.transactions
+            WHERE date >= date_format(date_add('day', -30, current_date), '%Y-%m-%d')
+                AND (from_address = :address OR to_address = :address)
+        )
+        SELECT
+            transaction_type,
+            COUNT(*) AS transaction_count,
+            SUM(CASE WHEN transaction_type = 'outgoing' THEN value ELSE 0 END) AS total_outgoing_value,
+            SUM(CASE WHEN transaction_type = 'incoming' THEN value ELSE 0 END) AS total_incoming_value
+        FROM recent_transactions
+        GROUP BY transaction_type;
+
+        3. Token Transfer Analysis:
+        WITH filtered_transactions AS (
+            SELECT
+                token_address,
+                from_address,
+                to_address,
+                value,
+                block_timestamp
+            FROM eth.token_transfers
+            WHERE token_address = :token_address
+                AND date >= :start_date
+        )
+        SELECT
+            COUNT(*) AS transaction_count,
+            SUM(value) AS total_transaction_value,
+            MAX(value) AS max_transaction_value,
+            MIN(value) AS min_transaction_value,
+            MAX_BY(from_address, value) AS max_value_from_address,
+            MAX_BY(to_address, value) AS max_value_to_address,
+            MIN_BY(from_address, value) AS min_value_from_address,
+            MIN_BY(to_address, value) AS min_value_to_address
+        FROM filtered_transactions;
+
+        Note: Replace :address, :token_address, and :start_date with actual values when querying.
+        `;
+    }
+
+    getQueryTemplate(): string {
+        return `
+        # Database Schema
+        {{databaseSchema}}
+
+        # Query Examples
+        {{queryExamples}}
+
+        # User's Query
+        {{userQuery}}
+
+        # Query Guidelines:
+        1. Time Range Requirements:
+           - ALWAYS include time range limitations in queries
+           - Default to last 3 months if no specific time range is mentioned
+           - Use date_parse(date, '%Y-%m-%d') >= date_add('month', -3, current_date) for default time range
+           - Adjust time range based on user's specific requirements
+
+        2. Query Optimization:
+           - Include appropriate LIMIT clauses
+           - Use proper indexing columns (date, address, block_number)
+           - Consider partitioning by date
+           - Add WHERE clauses for efficient filtering
+
+        3. Response Format Requirements:
+           You MUST respond in the following JSON format:
+           {
+             "sql": {
+               "query": "your SQL query string",
+               "explanation": "brief explanation of the query",
+               "timeRange": "specified time range in the query"
+             },
+             "analysis": {
+               "overview": {
+                 "totalTransactions": "number",
+                 "timeSpan": "time period covered",
+                 "keyMetrics": ["list of important metrics"]
+               },
+               "patterns": {
+                 "transactionPatterns": ["identified patterns"],
+                 "addressBehavior": ["address analysis"],
+                 "temporalTrends": ["time-based trends"]
+               },
+               "statistics": {
+                 "averages": {},
+                 "distributions": {},
+                 "anomalies": []
+               },
+               "insights": ["key insights from the data"],
+               "recommendations": ["suggested actions or areas for further investigation"]
+             }
+           }
+
+        4. Analysis Requirements:
+           - Focus on recent data patterns
+           - Identify trends and anomalies
+           - Provide statistical analysis
+           - Include risk assessment
+           - Suggest further investigations
+
+        Example Response:
+        {
+          "sql": {
+            "query": "WITH recent_txs AS (SELECT * FROM eth.transactions WHERE date_parse(date, '%Y-%m-%d') >= date_add('month', -3, current_date))...",
+            "explanation": "Query fetches last 3 months of transactions with aggregated metrics",
+            "timeRange": "Last 3 months"
+          },
+          "analysis": {
+            "overview": {
+              "totalTransactions": 1000000,
+              "timeSpan": "2024-01-01 to 2024-03-12",
+              "keyMetrics": ["Average daily transactions: 11000", "Peak day: 2024-02-15"]
+            },
+            "patterns": {
+              "transactionPatterns": ["High volume during Asian trading hours", "Weekend dips in activity"],
+              "addressBehavior": ["5 addresses responsible for 30% of volume", "Increasing DEX activity"],
+              "temporalTrends": ["Growing transaction volume", "Decreasing gas costs"]
+            },
+            "statistics": {
+              "averages": {
+                "dailyTransactions": 11000,
+                "gasPrice": "25 gwei"
+              },
+              "distributions": {
+                "valueRanges": ["0-1 ETH: 60%", "1-10 ETH: 30%", ">10 ETH: 10%"]
+              },
+              "anomalies": ["Unusual spike in gas prices on 2024-02-01"]
+            },
+            "insights": [
+              "Growing DeFi activity indicated by smart contract interactions",
+              "Whale addresses showing increased accumulation"
+            ],
+            "recommendations": [
+              "Monitor growing gas usage trend",
+              "Track new active addresses for potential market signals"
+            ]
+          }
+        }
+        `;
+    }
+
+    getAnalysisInstruction(): string {
+        return `
+            1. Data Overview:
+                - Analyze the overall pattern in the query results
+                - Identify key metrics and their significance
+                - Note any unusual or interesting patterns
+
+            2. Transaction Analysis:
+                - Examine transaction values and their distribution
+                - Analyze gas usage patterns
+                - Evaluate transaction frequency and timing
+                - Identify significant transactions or patterns
+
+            3. Address Behavior:
+                - Analyze address interactions
+                - Identify frequent participants
+                - Evaluate transaction patterns for specific addresses
+                - Note any suspicious or interesting behavior
+
+            4. Temporal Patterns:
+                - Analyze time-based patterns
+                - Identify peak activity periods
+                - Note any temporal anomalies
+                - Consider seasonal or cyclical patterns
+
+            5. Token Analysis (if applicable):
+                - Examine token transfer patterns
+                - Analyze token holder behavior
+                - Evaluate token concentration
+                - Note significant token movements
+
+            6. Statistical Insights:
+                - Provide relevant statistical measures
+                - Compare with typical blockchain metrics
+                - Highlight significant deviations
+                - Consider historical context
+
+            7. Risk Assessment:
+                - Identify potential suspicious activities
+                - Note any unusual patterns
+                - Flag potential security concerns
+                - Consider regulatory implications
+
+            Please provide a comprehensive analysis of the Ethereum blockchain data based on these ethereum information.
+            Focus on significant patterns, anomalies, and insights that would be valuable for understanding the blockchain activity.
+            Use technical blockchain terminology and provide specific examples from the data to support your analysis.
+
+            Note: This analysis is based on simulated data for demonstration purposes.
+        `;
+    }
+}
+
+export const databaseProvider = (runtime: IAgentRuntime) => {
+    const chain = "ethereum-mainnet";
+    return new DatabaseProvider(chain, runtime);
+};
+
+export const ethereumDataProvider: Provider = {
+    get: async (
+        runtime: IAgentRuntime,
+        message: Memory,
+        state: State
+    ): Promise<string | null> => {
+        try {
+            const provider = databaseProvider(runtime);
+            const schema = provider.getDatabaseSchema();
+            const examples = provider.getQueryExamples();
+            const template = provider.getQueryTemplate();
+
+            if (!state) {
+                state = (await runtime.composeState(message)) as State;
+            } else {
+                state = await runtime.updateRecentMessageState(state);
+            }
+
+            const buildContext = template
+                .replace("{{databaseSchema}}", schema)
+                .replace("{{queryExamples}}", examples)
+                .replace("{{userQuery}}", message.content.text || "");
+
+            const context = JSON.stringify({
+                user: runtime.agentId,
+                content: buildContext,
+                action: "NONE",
+            });
+
+            const preResponse = await generateMessageResponse({
+                runtime: runtime,
+                context: context,
+                modelClass: ModelClass.LARGE,
+            });
+
+            const userMessage = {
+                agentId: runtime.agentId,
+                roomId: message.roomId,
+                userId: message.userId,
+                content: message.content,
+            };
+
+            // Save response to memory
+            const preResponseMessage: Memory = {
+                id: stringToUuid(message.id + "-" + runtime.agentId),
+                ...userMessage,
+                userId: runtime.agentId,
+                content: preResponse,
+                embedding: getEmbeddingZeroVector(),
+                createdAt: Date.now(),
+            };
+
+            await runtime.messageManager.createMemory(preResponseMessage);
+            await runtime.updateRecentMessageState(state);
+
+            // Check for SQL query in the response using class method
+            const sqlQuery = provider.extractSQLQuery(preResponse);
+            if (sqlQuery) {
+                elizaLogger.log("%%%% D.A.T.A. Generated SQL query:", sqlQuery);
+                const analysisInstruction = provider.getAnalysisInstruction();
+                try {
+                    // Call query method on provider
+                    const queryResult = await provider.query(sqlQuery);
+
+                    elizaLogger.log("%%%% D.A.T.A. queryResult", queryResult);
+                    // Return combined context with query results and analysis instructions
+                    return `
+                    # query by user
+                    ${message.content.text}
+
+                    # query result
+                    ${JSON.stringify(queryResult, null, 2)}
+
+                    # Analysis Instructions
+                    ${analysisInstruction}
+                    `;
+                } catch (error) {
+                    elizaLogger.error("Error executing query:", error);
+                    return context;
+                }
+            } else {
+                elizaLogger.log("no sql query found in user message");
+            }
+            return context;
+        } catch (error) {
+            elizaLogger.error("Error in ethereum data provider:", error);
+            return null;
+        }
     },
-    {
-      "type": "sql",
-      "data": "SELECT COUNT(*) AS transaction_count FROM eth.transactions WHERE block_timestamp >= TIMESTAMP '2024-12-01 00:00:00' AND block_timestamp < TIMESTAMP '2024-12-02 00:00:00';",
-      "resultFormat": "transaction_count (Ethereum): {{result}}"
-    }
-  ]
-}
-\`\`\`
-
-## Example 2: User Query with No Query Needed
-User Query: "Can Ethereum transactions be tracked?"
-
-Parsed Query Objective: "Answer whether Ethereum transactions can be tracked."
-
-Response:
-\`\`\`json
-{
-  "status": "success",
-  "network": "Ethereum",
-  "dataSources": [
-    {
-      "type": "no_query_needed",
-      "data": "Yes, Ethereum transactions can be tracked using the blockchain.",
-      "resultFormat": "response_message (Ethereum): {{result}}"
-    }
-  ]
-}
-\`\`\`
-
-## Example 3: User Query with Unsupported Network
-User Query: "How many transactions on Binance Smart Chain yesterday?"
-
-Parsed Query Objective: "Count the total number of transactions on Binance Smart Chain for the previous day."
-
-Response:
-\`\`\`json
-{
-  "status": "success",
-  "network": "Binance Smart Chain",
-  "dataSources": [
-    {
-      "type": "unsupported_network",
-      "data": "Only Ethereum is supported.",
-      "resultFormat": "error_message (Binance Smart Chain): {{result}}"
-    }
-  ]
-}
-\`\`\`
-`;
-
-const databaseSchema = `
-CREATE EXTERNAL TABLE \`blocks\`(
-  \`timestamp\` timestamp,
-  \`number\` bigint,
-  \`hash\` string,
-  ...
-) PARTITIONED BY ( \`date\` string) ...;
-CREATE EXTERNAL TABLE \`transactions\`(
-  \`hash\` string,
-  \`nonce\` bigint,
-  ...
-) PARTITIONED BY ( \`date\` string) ...;
-`;
-
-const queryExamples = `
-Example 1:
-SELECT COUNT(*) AS token_transfers
-FROM eth.token_transfers
-WHERE block_timestamp >= TIMESTAMP '2024-05-20'
-AND block_timestamp < TIMESTAMP '2024-05-21'
-AND lower(token_address) = lower('0x514910771AF9Ca656af840dff83E8264EcF986CA');
-
-Example 2:
-SELECT * FROM eth.blocks WHERE date='2024-03-11';
-
-Example 3:
-SELECT date, SUM(gas_used) AS total_gas_used
-FROM eth.blocks
-GROUP BY date
-ORDER BY date DESC;
-
-Example 4:
-SELECT hash, value
-FROM eth.transactions
-WHERE block_timestamp >= timestamp '2024-05-16'
-AND block_timestamp < timestamp '2024-05-17'
-ORDER BY value DESC
-LIMIT 1;
-`;
-
-// Inject schema and examples into the template
-const prompt = queryResolutionTemplate
-    .replace("{{databaseSchema}}", databaseSchema)
-    .replace("{{queryExamples}}", queryExamples)
-    .replace("{{userQuery}}", userQuery);
-
-export class EthProvider implements Provider {
-    constructor() {}
-    async get(
-        runtime: IAgentRuntime,
-        message: Memory,
-        state: State
-    ): Promise<string | null> {
-        // Data retrieval logic for the provider
-        const blockchainDataRuntimeManager = runtime.getMemoryManager(
-            this.blockchainDataTableName
-        );
-        elizaLogger.log(
-            "Retrieving onchain eth txs from blockchain data runtime manager..."
-        );
-
-        const embedding = await embed(runtime, message.content.text);
-        const memories =
-            await blockchainDataRuntimeManager.searchMemoriesByEmbedding(
-                embedding,
-                {
-                    roomId: message.agentId,
-                    count: relativeTxsCount,
-                    match_threshold: 0.1,
-                }
-            );
-        return concatenateMemories(memories);
-    }
-}
-
-function concatenateMemories(memories: Memory[]): string {
-    const prefix = "A list of relevant on-chain ethereum txs content: ";
-    const concatenatedContent = memories
-        .map((memory) => memory.content.text)
-        .join(" ");
-    return prefix + concatenatedContent;
-}
-
-const relativeTxsCount = 100;
-
-export class EthTxsProvider implements Provider {
-    constructor(private blockchainDataTableName: string) {}
-    async get(
-        runtime: IAgentRuntime,
-        message: Memory,
-        state: State
-    ): Promise<string | null> {
-        // Data retrieval logic for the provider
-        const blockchainDataRuntimeManager = runtime.getMemoryManager(
-            this.blockchainDataTableName
-        );
-        elizaLogger.log(
-            "Retrieving onchain eth txs from blockchain data runtime manager..."
-        );
-
-        const embedding = await embed(runtime, message.content.text);
-        const memories =
-            await blockchainDataRuntimeManager.searchMemoriesByEmbedding(
-                embedding,
-                {
-                    roomId: message.agentId,
-                    count: relativeTxsCount,
-                    match_threshold: 0.1,
-                }
-            );
-        return concatenateMemories(memories);
-    }
-}
+};
