@@ -1,19 +1,98 @@
+# D.A.T.A (Data Authentication, Trust, and Attestation) Framework
 
-# D.A.T.A
-The D.A.T.A Framework (Data Authentication, Trust, and Attestation) is a cutting-edge solution developed by CARV to empower AI agents with unparalleled access to high-quality on-chain and off-chain data. Designed as a plugin for AI frameworks like Eliza, D.A.T.A enables AI agents to fetch, process, and act on data autonomously, fostering a new era of intelligent, data-driven decision-making.
+[![License: ISC](https://img.shields.io/badge/License-ISC-blue.svg)](https://opensource.org/licenses/ISC)
 
-## Documents
+> An AI-native framework for autonomous blockchain data interaction and analysis, developed by CARV.
 
-[D.A.T.A Framework](https://docs.carv.io/d.a.t.a.-ai-framework/introduction)
+## 🌟 Overview
 
-At its core, D.A.T.A bridges the gap between raw data and actionable insights by providing a complete lifecycle for data interaction. With robust integration into blockchain networks like Ethereum and Solana, as well as access to off-chain information through advanced tools such as vector databases, D.A.T.A equips AI agents to understand, interact with, and respond to the world more effectively.
+D.A.T.A is a cutting-edge framework that bridges the gap between AI agents and blockchain data. Built as a plugin for AI frameworks like Eliza, it enables AI agents to autonomously fetch, process, and act on both on-chain and off-chain data, fostering intelligent, data-driven decision-making in the Web3 space.
 
-Key highlights of the D.A.T.A Framework:
+## 🚀 Features
 
-- On-Chain Data Access: Fetch blockchain data, such as balances, transaction histories, and activity metrics, through scalable backend architectures using tools like AWS Lambda, Google Cloud Functions, and Amazon Athena.
-- Off-Chain Data Integration: Enrich on-chain insights with contextual data, including user profiles, token metadata, and market information.
-- Autonomous Decision-Making: Allow AI agents to determine and execute actions based on data, from sending alerts to performing on-chain transactions.
-- Cross-Chain Insights: Aggregate and unify data across multiple blockchains, enabling comprehensive understanding and decision-making.
-- Memory Sharing: Enable collaborative intelligence among AI agents through shared on-chain memory and a centralized knowledge repository.
+- **On-Chain Data Access**
+  - Real-time blockchain data fetching (transactions, balances, activity metrics)
+  - Scalable backend integration with AWS Lambda, Google Cloud Functions, and Amazon Athena
+  - Support for multiple blockchain networks including Ethereum and Solana
 
-The D.A.T.A Framework is a game-changer for developers, providing the tools needed to build powerful, intelligent AI agents that can autonomously interact with decentralized ecosystems, make data-driven decisions, and evolve over time.
+- **Off-Chain Data Integration**
+  - User profiles and behavioral analytics
+  - Token metadata and market information
+  - Contextual data enrichment
+
+- **AI-Native Architecture**
+  - Vector database integration for semantic search
+  - Autonomous decision-making capabilities
+  - Built-in memory management for AI agents
+
+- **Cross-Chain Analytics**
+  - Unified data aggregation across blockchains
+  - Standardized query interface
+  - Comprehensive blockchain activity analysis
+
+- **Collaborative Intelligence**
+  - Shared on-chain memory system
+  - Centralized knowledge repository
+  - Inter-agent communication protocols
+
+## 📋 Prerequisites
+
+- Node.js (v16 or higher)
+- Python 3.8+
+- Access to blockchain node or data provider
+- API credentials for data services
+
+## 🔧 Configuration
+
+1. Create a `.env` file in the root directory
+2. Add your API credentials:
+```env
+DATA_API_KEY=your_api_key
+DATA_AUTH_TOKEN=your_auth_token
+```
+
+## 💡 Usage
+[Eliza Plugin](/eliza/README.md)
+
+## 📖 Documentation
+
+Comprehensive documentation is available at [D.A.T.A Framework Documentation](https://docs.carv.io/d.a.t.a.-ai-framework/introduction).
+
+Key topics covered:
+- Architecture Overview
+- Plugin Integration Guide
+- Query Examples
+- Best Practices
+- API Reference
+
+## 🤝 Contributing
+
+We welcome contributions from the community! Please read our [Contributing Guidelines](CONTRIBUTING.md) before submitting pull requests.
+
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
+3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
+4. Push to the branch (`git push origin feature/AmazingFeature`)
+5. Open a Pull Request
+
+## 📄 License
+
+This project is licensed under the ISC License - see the [LICENSE](LICENSE) file for details.
+
+## 👥 Team
+
+- CARV Protocol Team
+- Contributors from the open-source community
+
+## 📮 Contact & Support
+
+- [GitHub Issues](https://github.com/carv-protocol/eliza-d.a.t.a/issues) for bug reports and feature requests
+- [Dev Discord Community](https://discord.com/invite/fVPc884by4) for general developer discussions
+- [Documentation](https://docs.carv.io/d.a.t.a.-ai-framework/introduction) for technical support
+
+## 🙏 Acknowledgments
+
+Special thanks to:
+- The Eliza communities
+- Our data provider partners
+- All contributors and supporters
