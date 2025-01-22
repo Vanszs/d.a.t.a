@@ -27,3 +27,60 @@ Given the recent messages, extract the following information about the transacti
 - Order direction (ASC or DESC)
 
 Respond with a JSON markdown block containing only the extracted values.`;
+
+export const fetchTokenInfoTemplate = `Respond with a JSON markdown block containing only the extracted values. Use null for any values that cannot be determined.
+
+Example response:
+\`\`\`json
+{
+    "symbol": "CARV",
+    "platform": "ethereum"
+}
+\`\`\`
+
+{{recentMessages}}
+
+Given the recent messages, extract the following information about the token query:
+- Token symbol (required, remove $ prefix if present)
+- Platform/chain to query (optional, e.g., ethereum, base, solana)
+
+Notes for extraction:
+- Token symbols like "$CARV" and "CARV" should both return "CARV" as the symbol
+- Platform is case-insensitive, normalize to lowercase
+- If no platform is specified, return null for platform
+- Ignore any other information in the message
+
+Respond with a JSON markdown block containing only the extracted values.`;
+
+export const fetchTwitterBalanceTemplate = `Respond with a JSON markdown block containing only the extracted values. Use null for any values that cannot be determined.
+
+Example response:
+\`\`\`json
+{
+    "twitter_user_id": "gatsbyter",
+    "chain_name": "arbitrum-one",
+    "token_ticker": "carv"
+}
+\`\`\`
+
+{{recentMessages}}
+
+Given the recent messages, extract the following information about the balance query:
+- Twitter user ID (required, remove @ prefix if present)
+- Chain name (required, normalize to lowercase, e.g., ethereum, arbitrum-one, base, opbnb)
+- Token ticker (required, normalize to lowercase)
+
+Notes for extraction:
+- Twitter user IDs like "@gatsbyter" and "gatsbyter" should both return "gatsbyter"
+- Chain names are case-insensitive, normalize to lowercase
+- Token tickers like "$CARV" and "CARV" should both return "carv"
+- All three parameters (twitter_user_id, chain_name, token_ticker) are required
+- If any required parameter is missing, return null for all values
+
+Example valid chain names:
+- ethereum
+- arbitrum-one
+- base
+- opbnb
+
+Respond with a JSON markdown block containing only the extracted values.`;
