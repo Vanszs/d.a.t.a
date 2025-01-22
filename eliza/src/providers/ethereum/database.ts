@@ -11,7 +11,7 @@ import {
 } from "@elizaos/core";
 
 // API response interface for query results
-interface IQueryResult {
+export interface IQueryResult {
     success: boolean;
     data: any[];
     metadata: {
@@ -26,12 +26,14 @@ interface IQueryResult {
             hasMore: boolean;
         };
     };
+    analysis?: string;
     error?: {
         code: string;
         message: string;
         details?: any;
     };
 }
+
 // API response interface
 interface IApiResponse {
     code: number;
@@ -42,6 +44,11 @@ interface IApiResponse {
             items: (string | number)[];
         }[];
     };
+}
+
+export interface IAnalysisResult {
+    context: string;
+    queryResult: IQueryResult;
 }
 
 export class DatabaseProvider {
@@ -149,11 +156,12 @@ export class DatabaseProvider {
 
     private async sendSqlQuery(sql: string): Promise<IApiResponse> {
         try {
-            const response = await fetch(this.API_URL, {
+            const url = `${this.API_URL}/sql_query`;
+            const response = await fetch(url, {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
-                    Authorization: this.AUTH_TOKEN,
+                    Authorization: this.AUTH_TOKEN ? `${this.AUTH_TOKEN}` : "",
                 },
                 body: JSON.stringify({
                     sql_content: sql,
@@ -197,8 +205,8 @@ export class DatabaseProvider {
             const queryType = sql.toLowerCase().includes("token_transfers")
                 ? "token"
                 : sql.toLowerCase().includes("count")
-                    ? "aggregate"
-                    : "transaction";
+                  ? "aggregate"
+                  : "transaction";
 
             // Send query to API
             const apiResponse = await this.sendSqlQuery(sql);
@@ -532,24 +540,109 @@ export class DatabaseProvider {
             Note: This analysis is based on simulated data for demonstration purposes.
         `;
     }
-}
 
-export const databaseProvider = (runtime: IAgentRuntime) => {
-    const chain = "ethereum-mainnet";
-    return new DatabaseProvider(chain, runtime);
-};
+    private getAnalysisTemplate(): string {
+        return `
+Please analyze the provided Ethereum blockchain data and generate a comprehensive analysis report. Focus on the following aspects:
 
-export const ethereumDataProvider: Provider = {
-    get: async (
+1. Transaction Overview
+- Total number of transactions and time period covered
+- Block range and statistics (unique blocks, average transactions per block)
+- Success rate and overall transaction patterns
+- Notable trends or anomalies in the dataset
+
+2. Value Analysis
+- Total and average ETH value transferred
+- Distribution of transaction values
+- Significant value transfers
+- Token transfer patterns (if applicable)
+
+3. Gas and Network Analysis
+- Gas usage patterns (average, total, distribution)
+- Gas price trends and fee market conditions
+- Network congestion indicators
+- Transaction efficiency metrics
+
+4. Address Activity
+- Unique addresses and their roles
+- Most active participants (senders/receivers)
+- Contract interactions and patterns
+- Notable address behaviors
+
+5. Technical Insights
+- Transaction type distribution
+- Input data patterns and complexity
+- Smart contract interactions
+- Special transaction characteristics
+
+6. Risk and Security
+- Unusual patterns or anomalies
+- Potential security concerns
+- Notable address behaviors
+- Regulatory considerations
+
+Please provide a natural language analysis that:
+- Uses professional blockchain terminology
+- Highlights significant patterns and anomalies
+- Provides specific examples from the data
+- Draws meaningful conclusions about network usage
+- Includes relevant statistical measures
+- Notes any unusual or suspicious activities
+
+Transaction Data:
+{{transactionData}}
+
+Query Metadata:
+{{queryMetadata}}
+`;
+    }
+
+    public async analyzeQuery(
+        queryResult: IQueryResult,
+        runtime: IAgentRuntime
+    ): Promise<string> {
+        try {
+            if (!queryResult?.data || !queryResult?.metadata) {
+                elizaLogger.warn("Invalid query result for analysis");
+                return null;
+            }
+
+            const template = this.getAnalysisTemplate();
+            const context = template
+                .replace(
+                    "{{transactionData}}",
+                    JSON.stringify(queryResult.data, null, 2)
+                )
+                .replace(
+                    "{{queryMetadata}}",
+                    JSON.stringify(queryResult.metadata, null, 2)
+                );
+
+            const analysisResponse = await generateMessageResponse({
+                runtime,
+                context: context,
+                modelClass: ModelClass.LARGE,
+            });
+
+            // Extract text content from response
+            return typeof analysisResponse === "string"
+                ? analysisResponse
+                : analysisResponse.text || null;
+        } catch (error) {
+            elizaLogger.error("Error in analyzeQuery:", error);
+            return null;
+        }
+    }
+
+    public async processD_A_T_AQuery(
         runtime: IAgentRuntime,
         message: Memory,
         state: State
-    ): Promise<string | null> => {
+    ): Promise<IAnalysisResult | null> {
         try {
-            const provider = databaseProvider(runtime);
-            const schema = provider.getDatabaseSchema();
-            const examples = provider.getQueryExamples();
-            const template = provider.getQueryTemplate();
+            const schema = this.getDatabaseSchema();
+            const examples = this.getQueryExamples();
+            const template = this.getQueryTemplate();
 
             if (!state) {
                 state = (await runtime.composeState(message)) as State;
@@ -595,17 +688,26 @@ export const ethereumDataProvider: Provider = {
             await runtime.updateRecentMessageState(state);
 
             // Check for SQL query in the response using class method
-            const sqlQuery = provider.extractSQLQuery(preResponse);
+            const sqlQuery = this.extractSQLQuery(preResponse);
             if (sqlQuery) {
                 elizaLogger.log("%%%% D.A.T.A. Generated SQL query:", sqlQuery);
-                const analysisInstruction = provider.getAnalysisInstruction();
+                const analysisInstruction = this.getAnalysisInstruction();
                 try {
                     // Call query method on provider
-                    const queryResult = await provider.query(sqlQuery);
+                    const queryResult = await this.query(sqlQuery);
 
                     elizaLogger.log("%%%% D.A.T.A. queryResult", queryResult);
+                    // // Generate analysis for the query result
+                    // const analysis = await this.analyzeQuery(
+                    //     queryResult,
+                    //     runtime
+                    // );
+                    // if (analysis) {
+                    //     queryResult.analysis = analysis;
+                    // }
+
                     // Return combined context with query results and analysis instructions
-                    return `
+                    const context = `
                     # query by user
                     ${message.content.text}
 
@@ -615,14 +717,55 @@ export const ethereumDataProvider: Provider = {
                     # Analysis Instructions
                     ${analysisInstruction}
                     `;
+                    return {
+                        context: context,
+                        queryResult: queryResult,
+                    };
                 } catch (error) {
                     elizaLogger.error("Error executing query:", error);
-                    return context;
+                    return null;
                 }
             } else {
                 elizaLogger.log("no sql query found in user message");
             }
-            return context;
+            return null;
+        } catch (error) {
+            elizaLogger.error("Error in processD_A_T_AQuery:", error);
+            return null;
+        }
+    }
+}
+
+export const databaseProvider = (runtime: IAgentRuntime) => {
+    const chain = "ethereum-mainnet";
+    return new DatabaseProvider(chain, runtime);
+};
+
+export const ethereumDataProvider: Provider = {
+    get: async (
+        runtime: IAgentRuntime,
+        message: Memory,
+        state: State
+    ): Promise<string | null> => {
+        try {
+            const isActionNone =
+                message.content.action !== "NONE" &&
+                message.content.action !== undefined &&
+                message.content.action !== null;
+            if (isActionNone) {
+                elizaLogger.log(`actions: ${message.content.action}`);
+                return null;
+            }
+            const provider = databaseProvider(runtime);
+            const result = await provider.processD_A_T_AQuery(
+                runtime,
+                message,
+                state
+            );
+            if (result) {
+                return result.context;
+            }
+            return null;
         } catch (error) {
             elizaLogger.error("Error in ethereum data provider:", error);
             return null;
