@@ -1,194 +1,233 @@
-// internal/core/cognitive.go
-
 package core
 
 import (
+	"container/ring"
 	"context"
-	"data-agent/internal/data"
-	"data-agent/pkg/llm"
-	"fmt"
 	"time"
 
 	"github.com/carv-protocol/d.a.t.a/src/internal/memory"
+	"github.com/carv-protocol/d.a.t.a/src/pkg/llm"
+	"go.uber.org/zap"
 )
 
-// CognitiveEngine handles the core decision-making process
 type CognitiveEngine struct {
-	llm       llm.Client
-	evaluator *Evaluator
-	context   *CognitiveContext
+	llm           llm.Client
+	actionHistory *ring.Ring
+	rewardModel   *RewardModel
+	memory        memory.Manager
+	config        CognitiveConfig
+	log           *zap.SugaredLogger
 }
 
-// CognitiveContext maintains the current state for decision making
-type CognitiveContext struct {
-	Goals      []Goal
-	DataList   []data.Data
-	TokenState TokenState
-	Memory     memory.WorkingMemory
-	Data       []data.Data
-	Timestamp  time.Time
+type CognitiveConfig struct {
+	NumIterations      int
+	SamplesPerBatch    int
+	MinRewardThreshold float64
+	Temperature        float64
+	MaxChainLength     int
 }
 
-type Analysis struct {
-	Understanding string
-	Intent        Intent
-	Relevance     map[string]float64
-	Actions       []Action
-	Confidences   []float64
+type ThoughtChain struct {
+	Steps        []ThoughtStep
+	Verification []string
+	Reflection   []string
+	Alternatives []string
+	Actions      []Action
+	Confidence   float64
 }
 
-type Intent struct {
-	Type        string // e.g., "question", "proposal", "feedback"
-	Priority    float64
-	Stakeholder data.StakeholderInfo
-	GoalImpact  map[string]float64
+type ThoughtStep struct {
+	Reasoning    string
+	Confidence   float64
+	Sources      []string
+	Stakeholders []string
 }
 
-type Suggestion struct {
-	Type         string
-	Action       string
-	Rationale    string
-	Priority     float64
-	Requirements map[string]interface{}
+type RewardModel struct {
+	accuracyWeight  float64
+	coherenceWeight float64
+	lengthWeight    float64
+	stakingWeight   float64
 }
 
-// Analyze processes input and generates comprehensive analysis
-func (c *CognitiveEngine) Analyze(ctx context.Context, input Input, identity data.IdentityInfo) (Analysis, error) {
-	// 1. Build analysis context
-	analysisCtx, err := c.buildAnalysisContext(input, identity)
-	if err != nil {
-		return Analysis{}, fmt.Errorf("failed to build analysis context: %w", err)
+func NewCognitiveEngine(llmClient llm.Client) *CognitiveEngine {
+	return &CognitiveEngine{
+		llm:           llmClient,
+		actionHistory: ring.New(100),
+		rewardModel:   newRewardModel(),
+		log:           zap.S(),
 	}
-
-	// 2. Understand input intent
-	understanding, err := c.understandInput(ctx, input, analysisCtx)
-	if err != nil {
-		return Analysis{}, fmt.Errorf("failed to understand input: %w", err)
-	}
-
-	// 3. Evaluate stakeholder influence
-	stakeholderInfo, err := c.evaluateStakeholder(ctx, identity, understanding)
-	if err != nil {
-		return Analysis{}, fmt.Errorf("failed to evaluate stakeholder: %w", err)
-	}
-
-	// 4. Assess goal relevance
-	relevance, err := c.assessGoalRelevance(ctx, understanding, stakeholderInfo)
-	if err != nil {
-		return Analysis{}, fmt.Errorf("failed to assess goal relevance: %w", err)
-	}
-
-	// 5. Generate suggestions
-	suggestions, err := c.generateSuggestions(ctx, understanding, stakeholderInfo, relevance)
-	if err != nil {
-		return Analysis{}, fmt.Errorf("failed to generate suggestions: %w", err)
-	}
-
-	// 6. Calculate confidence
-	confidence := c.calculateConfidence(understanding, stakeholderInfo, suggestions)
-
-	return Analysis{
-		Understanding: understanding.Summary,
-		Intent: Intent{
-			Type:        understanding.Type,
-			Priority:    c.calculatePriority(stakeholderInfo, understanding),
-			Stakeholder: stakeholderInfo,
-			GoalImpact:  relevance,
-		},
-		Relevance:   relevance,
-		Suggestions: suggestions,
-		Confidence:  confidence,
-	}, nil
 }
 
-// buildAnalysisContext gathers all relevant information for analysis
-func (c *CognitiveEngine) buildAnalysisContext(input Input, identity data.IdentityInfo) (llm.Context, error) {
-	// Combine multiple sources of context
-	context := llm.Context{
-		CurrentGoals:    c.context.Goals,
-		TokenState:      c.context.TokenState,
-		RecentMemory:    c.context.Memory.Recent(),
-		StakeholderInfo: identity,
-		MarketContext:   c.context.MarketData,
+func (c *CognitiveEngine) Train(ctx context.Context, cognitiveContext CognitiveContext) error {
+	for iteration := 0; iteration < c.config.NumIterations; iteration++ {
+		c.log.Infow("Starting training iteration", "iteration", iteration)
+
+		// Generate samples
+		samples := c.generateSamples(ctx, cognitiveContext)
+
+		// Evaluate samples and calculate rewards
+		rewards := c.evaluateSamples(ctx, samples)
+
+		// Update model based on rewards
+		if err := c.updateModel(ctx, samples, rewards); err != nil {
+			return err
+		}
+
+		// Check for convergence
+		if c.checkConvergence(rewards) {
+			c.log.Info("Training converged early")
+			break
+		}
 	}
 
-	return context, nil
+	return nil
 }
 
-// understandInput uses LLM to comprehend input meaning and intent
-func (c *CognitiveEngine) understandInput(ctx context.Context, input Input, analysisCtx llm.Context) (Understanding, error) {
-	prompt := c.generateUnderstandingPrompt(input, analysisCtx)
+// Update model using DeepSeek's GRPO
+func (c *CognitiveEngine) updateModel(ctx context.Context, entry LearningEntry) error {
+	// Calculate advantages
+	advantage := entry.Reward - c.calculateBaseline()
 
-	response, err := c.llm.GenerateText(ctx, llm.State, prompt)
-	if err != nil {
-		return Understanding{}, err
+	// Update policy using clipped objective
+	if err := c.policyOptimizer.UpdatePolicy(PolicyUpdate{
+		Entry:     entry,
+		Advantage: advantage,
+		Epsilon:   0.2, // Clipping parameter
+	}); err != nil {
+		return err
 	}
 
-	return c.parseUnderstanding(response)
+	// Check convergence
+	if c.checkConvergence(entry.Reward) {
+		c.adjustLearningParameters()
+	}
+
+	return nil
 }
 
-// evaluateStakeholder assesses stakeholder influence and history
-func (c *CognitiveEngine) evaluateStakeholder(ctx context.Context, identity data.IdentityInfo, understanding Understanding) (data.StakeholderInfo, error) {
-	// Get token holdings
-	holdings, err := c.context.TokenState.GetHoldings(identity.Address)
-	if err != nil {
-		return data.StakeholderInfo{}, err
-	}
+func (c *CognitiveEngine) GenerateThoughtChain(ctx context.Context, request AnalysisRequest) (*ThoughtChain, error) {
+	chain := &ThoughtChain{}
 
-	// Get interaction history
-	history, err := c.context.Memory.GetStakeholderHistory(identity.ID)
-	if err != nil {
-		return data.StakeholderInfo{}, err
-	}
-
-	return data.StakeholderInfo{
-		Identity:    identity,
-		Holdings:    holdings,
-		History:     history,
-		Influence:   c.calculateInfluence(holdings, history),
-		Preferences: c.inferPreferences(history),
-	}, nil
-}
-
-// assessGoalRelevance evaluates how input relates to current goals
-func (c *CognitiveEngine) assessGoalRelevance(ctx context.Context, understanding Understanding, stakeholder data.StakeholderInfo) (map[string]float64, error) {
-	relevance := make(map[string]float64)
-
-	prompt := c.generateRelevancePrompt(understanding, stakeholder, c.context.Goals)
-
-	response, err := c.llm.GenerateText(ctx, prompt)
+	// Initial reasoning with context
+	reasoning, err := c.generateReasoning(ctx, request)
 	if err != nil {
 		return nil, err
 	}
+	chain.Steps = append(chain.Steps, reasoning)
 
-	return c.parseRelevanceScores(response)
-}
+	// Self-verification
+	chain.Verification = c.verifyReasoning(ctx, chain.Steps)
 
-// generateSuggestions creates action suggestions based on analysis
-func (c *CognitiveEngine) generateSuggestions(ctx context.Context, understanding Understanding, stakeholder data.StakeholderInfo, relevance map[string]float64) ([]Suggestion, error) {
-	prompt := c.generateSuggestionsPrompt(understanding, stakeholder, relevance)
+	// Generate alternatives
+	chain.Alternatives = c.exploreAlternatives(ctx, chain.Steps)
 
-	response, err := c.llm.GenerateText(ctx, prompt)
+	// Final reflection
+	chain.Reflection = c.reflectOnProcess(ctx, chain)
+
+	// Generate actions
+	actions, err := c.generateActions(ctx, chain, request)
 	if err != nil {
 		return nil, err
 	}
+	chain.Actions = actions
 
-	suggestions := c.parseSuggestions(response)
+	// Calculate overall confidence
+	chain.Confidence = c.calculateConfidence(chain)
 
-	// Filter suggestions based on governance rules
-	return c.filterSuggestions(suggestions, stakeholder), nil
+	return chain, nil
 }
 
-// calculateConfidence determines confidence level in analysis
-func (c *CognitiveEngine) calculateConfidence(understanding Understanding, stakeholder data.StakeholderInfo, suggestions []Suggestion) float64 {
-	// Consider multiple factors for confidence
+func (c *CognitiveEngine) generateSamples(ctx context.Context, cognitiveContext CognitiveContext) []ThoughtChain {
+	samples := make([]ThoughtChain, c.config.SamplesPerBatch)
+
+	for i := 0; i < c.config.SamplesPerBatch; i++ {
+		temperature := c.calculateTemperature(i)
+
+		chain, err := c.GenerateThoughtChain(ctx, AnalysisRequest{
+			Context:     cognitiveContext,
+			Temperature: temperature,
+		})
+		if err != nil {
+			c.log.Warnw("Failed to generate sample", "error", err)
+			continue
+		}
+
+		samples[i] = *chain
+	}
+
+	return samples
+}
+
+func (c *CognitiveEngine) evaluateSamples(ctx context.Context, samples []ThoughtChain) []float64 {
+	rewards := make([]float64, len(samples))
+
+	for i, sample := range samples {
+		rewards[i] = c.calculateReward(ctx, sample)
+	}
+
+	return rewards
+}
+
+func (c *CognitiveEngine) calculateReward(ctx context.Context, chain ThoughtChain) float64 {
+	// Base reward from accuracy
+	baseReward := c.rewardModel.calculateAccuracy(chain)
+
+	// Chain coherence reward
+	coherenceReward := c.rewardModel.calculateCoherence(chain)
+
+	// Length penalty/reward
+	lengthScore := c.rewardModel.calculateLengthScore(chain)
+
+	// Stakeholder alignment reward
+	stakeholderScore := c.rewardModel.calculateStakeholderAlignment(chain)
+
+	// Combine rewards with weights
+	totalReward := (baseReward * c.rewardModel.accuracyWeight) +
+		(coherenceReward * c.rewardModel.coherenceWeight) +
+		(lengthScore * c.rewardModel.lengthWeight) +
+		(stakeholderScore * c.rewardModel.stakingWeight)
+
+	return totalReward
+}
+
+func (c *CognitiveEngine) Learn(ctx context.Context, entry LearningEntry) error {
+	// Store in memory for future reference
+	if err := c.memory.Store(ctx, memory.Entry{
+		Type:    "learning",
+		Content: entry,
+		Time:    time.Now(),
+	}); err != nil {
+		return err
+	}
+
+	// Update reward model weights based on outcome
+	c.rewardModel.updateWeights(entry)
+
+	return nil
+}
+
+func (c *CognitiveEngine) calculateConfidence(chain *ThoughtChain) float64 {
+	// Consider multiple factors
 	factors := map[string]float64{
-		"understanding_clarity": understanding.Confidence,
-		"stakeholder_history":   c.getStakeholderConfidence(stakeholder),
-		"suggestion_consensus":  c.getSuggestionConsensus(suggestions),
-		"data_quality":          c.getDataQuality(),
+		"step_confidence":    c.averageStepConfidence(chain.Steps),
+		"verification_score": c.verificationScore(chain.Verification),
+		"alternatives_count": float64(len(chain.Alternatives)) / 5.0, // Normalize
+		"reflection_depth":   c.reflectionDepth(chain.Reflection),
 	}
 
 	// Weight and combine factors
-	return c.calculateWeightedScore(factors)
+	weights := map[string]float64{
+		"step_confidence":    0.4,
+		"verification_score": 0.3,
+		"alternatives_count": 0.15,
+		"reflection_depth":   0.15,
+	}
+
+	var confidence float64
+	for factor, value := range factors {
+		confidence += value * weights[factor]
+	}
+
+	return confidence
 }

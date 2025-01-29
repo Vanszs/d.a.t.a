@@ -1,171 +1,232 @@
-// internal/core/agent.go
-
+// agent.go
 package core
 
 import (
 	"context"
-	"fmt"
 	"time"
 
+	"github.com/google/uuid"
+	"go.uber.org/zap"
+
 	"github.com/carv-protocol/d.a.t.a/src/characters"
-	"github.com/carv-protocol/d.a.t.a/src/internal/action"
 	"github.com/carv-protocol/d.a.t.a/src/internal/data"
-	"github.com/carv-protocol/d.a.t.a/src/internal/goal"
 	"github.com/carv-protocol/d.a.t.a/src/internal/memory"
 	"github.com/carv-protocol/d.a.t.a/src/internal/plugins"
+	"github.com/carv-protocol/d.a.t.a/src/internal/tasks"
+	"github.com/carv-protocol/d.a.t.a/src/pkg/llm"
 )
 
-type InputType string
-
-const (
-	Unknown    InputType = "Unknown"
-	Autonomous InputType = "Autonomous"
-)
-
-// Agent represents the autonomous AI agent
 type Agent struct {
-	ID          uuid.UUID
-	cognitive   *CognitiveEngine
-	memory      memory.Manager
-	character   *characters.Character
-	goalManager *goal.Manager
-	dataManager *data.Manager
-	scheduler   *Scheduler
-	plugins     *plugins.PluginRegistry // Inject plugin registry
+	ID            uuid.UUID
+	cognitive     *CognitiveEngine
+	memoryManager memory.Manager
+	character     *characters.Character
+	taskManager   *tasks.Manager
+	dataManager   data.Manager
+	scheduler     *Scheduler
+	plugins       *plugins.PluginRegistry
+	config        AgentConfig
+	log           *zap.SugaredLogger
 }
 
-type Runtime interface {
-	GetMemory() memory.Manager
-	GetData() *data.Manager
-	GetGoals() *goal.Manager
-	GetCharacter() *characters.Character
+type AgentConfig struct {
+	ID            uuid.UUID
+	Character     *characters.Character
+	LLMClient     llm.Client
+	DataManager   data.Manager
+	MemoryManager memory.Manager
+	Training      struct {
+		Enabled       bool
+		MaxIterations int
+		BatchSize     int
+		StopThreshold float64
+	}
+	Inference struct {
+		Temperature    float64
+		MaxChainLength int
+		MinConfidence  float64
+	}
 }
 
-type Input struct {
-	Type      InputType
-	Content   string
-	Timestamp time.Time
+func NewAgent(config AgentConfig) *Agent {
+	return &Agent{
+		ID:            config.ID,
+		cognitive:     NewCognitiveEngine(config.LLMClient),
+		memoryManager: config.MemoryManager,
+		character:     config.Character,
+		dataManager:   config.DataManager,
+		config:        config,
+		log:           zap.S(),
+	}
 }
 
-// ProcessInput handles both user inputs and autonomous checks
+func (a *Agent) ExecuteTask(ctx context.Context, task Task, prefs StakeholderPreferences) (TaskResult, error) {
+	// 1. Generate samples using GRPO
+	samples := a.cognitive.generateSamples(ctx, task, prefs)
+
+	// 2. Calculate rewards
+	rewards := a.cognitive.evaluateSamples(ctx, samples, prefs)
+
+	// 3. Select best action
+	selectedAction := a.cognitive.selectBestAction(samples, rewards)
+
+	// 4. Execute and learn
+	result := a.executeAction(ctx, selectedAction)
+	a.learn(ctx, task, result, prefs)
+
+	return result, nil
+}
+
+func (a *Agent) learn(ctx context.Context, task Task, result TaskResult, prefs StakeholderPreferences) error {
+	// Calculate combined reward
+	baseReward := a.rewardModel.calculateBaseReward(result)
+	stakeholderReward := a.calculateStakeholderReward(result, prefs)
+	finalReward := baseReward*0.6 + stakeholderReward*0.4
+
+	// Update using GRPO
+	return a.cognitive.updateModel(ctx, LearningEntry{
+		Task:     task,
+		Result:   result,
+		Reward:   finalReward,
+		Feedback: stakeholderReward,
+	})
+}
+
 func (a *Agent) ProcessInput(ctx context.Context, input Input) error {
-	runtime := a.createRuntime()
-	// 1. Update global context with new input
-	newContext := a.contextBuilder.BuildContext(ctx, runtime, input)
+	a.log.Infow("Processing input", "type", input.Type)
 
-	// 2. Cognitive analysis
-	analysis, err := a.cognitive.Analyze(ctx, AnalysisRequest{
+	// Build cognitive context
+	cognitiveContext, err := a.buildContext(ctx, input)
+	if err != nil {
+		return err
+	}
+
+	// Run training if enabled
+	if a.config.Training.Enabled {
+		if err := a.cognitive.Train(ctx, cognitiveContext); err != nil {
+			a.log.Warnw("Training failed", "error", err)
+		}
+	}
+
+	// Generate thought chain
+	thoughtChain, err := a.cognitive.GenerateThoughtChain(ctx, AnalysisRequest{
 		Input:     input,
-		Context:   newContext,
+		Context:   cognitiveContext,
 		Character: a.character,
-		Goals:     a.goalManager.GetActiveGoals(),
+		Tasks:     a.taskManager.GetTasks(ctx),
 	})
 	if err != nil {
 		return err
 	}
 
-	// 3. Execute actions through runtime interface
-	for _, actionResult := range analysis.Actions {
-		action, exists := a.cognitive.actionRegistry.Get(actionResult.Name)
-		if !exists {
+	// Execute actions from thought chain
+	for _, action := range thoughtChain.Actions {
+		// Plugin pre-execution hook
+		data := map[string]interface{}{
+			"action":       action,
+			"thoughtChain": thoughtChain,
+		}
+		if err := a.plugins.Execute(ctx, "before_action", data); err != nil {
+			a.log.Warnw("Plugin pre-execution failed", "error", err)
 			continue
 		}
 
-		data := map[string]interface{}{"action": action, "analysis": analysis}
-		if err := a.plugins.Execute(ctx, "filter_action", data); err != nil {
-			return err
+		// Execute action
+		result, err := a.executeAction(ctx, action)
+		if err != nil {
+			a.storeFailure(ctx, thoughtChain, action, err)
+			continue
 		}
 
-		if err := action.Execute(ctx, runtime); err != nil {
-			a.memory.StoreFailure(ctx, actionResult, err)
-			continue
+		// Store success and learn
+		a.storeSuccess(ctx, thoughtChain, action)
+		a.learn(ctx, input, thoughtChain, result)
+
+		// Plugin post-execution hook
+		if err := a.plugins.Execute(ctx, "after_action", data); err != nil {
+			a.log.Warnw("Plugin post-execution failed", "error", err)
 		}
 	}
-
-	// 4. Learn from interaction
-	a.learn(ctx, input, analysis)
 
 	return nil
 }
 
+func (a *Agent) executeAction(ctx context.Context, action Action) (ActionResult, error) {
+	runtime := a.createRuntime()
+
+	a.log.Infow("Executing action", "type", action.Type)
+
+	// Validate action parameters
+	if err := action.ValidateParams(action.Params); err != nil {
+		return ActionResult{}, err
+	}
+
+	// Check if action requires approval
+	if action.RequiresApproval() {
+		approved, err := a.checkGovernanceApproval(ctx, action)
+		if err != nil || !approved {
+			return ActionResult{}, ErrActionNotApproved
+		}
+	}
+
+	// Execute action
+	if err := action.Execute(ctx, runtime); err != nil {
+		return ActionResult{}, err
+	}
+
+	// Calculate impact
+	impact := action.EstimateImpact(runtime.GetContext())
+
+	return ActionResult{
+		Action: action,
+		Impact: impact,
+		Time:   time.Now(),
+	}, nil
+}
+
+func (a *Agent) learn(ctx context.Context, input Input, chain *ThoughtChain, result ActionResult) {
+	// Store interaction memory
+	a.memoryManager.Store(ctx, memory.Entry{
+		Type: "interaction",
+		Content: LearningEntry{
+			Input:     input,
+			Chain:     chain,
+			Result:    result,
+			Timestamp: time.Now(),
+		},
+	})
+
+	// Update character knowledge
+	a.character.Learn(CharacterLearning{
+		ThoughtChain: chain,
+		Result:       result,
+	})
+
+	// Update cognitive model
+	a.cognitive.Learn(ctx, LearningEntry{
+		Input:  input,
+		Chain:  chain,
+		Result: result,
+	})
+}
+
 func (a *Agent) StartAutonomousLoop(ctx context.Context) {
 	a.scheduler.SchedulePeriodic(ctx, time.Hour, func() {
-		a.ProcessInput(ctx, Input{
+		if err := a.ProcessInput(ctx, Input{
 			Type:      Autonomous,
 			Content:   "Periodic goal evaluation",
 			Timestamp: time.Now(),
-		})
-	})
-}
-
-// executeActions performs the selected actions
-func (a *Agent) executeActions(ctx context.Context, actions []action.Action) (Response, error) {
-	var results []action.Result
-
-	// Execute each action in sequence
-	for _, act := range actions {
-		result, err := act.Execute(ctx)
-		if err != nil {
-			// Handle failed action
-			return a.handleFailedAction(act, err)
+		}); err != nil {
+			a.log.Errorw("Autonomous processing failed", "error", err)
 		}
-		results = append(results, result)
-	}
-
-	// Generate response based on action results
-	return a.generateResponse(results)
-}
-
-func (a *Agent) learn(ctx context.Context, input Input, analysis Analysis) {
-	// Store interaction memory
-	a.memory.Store(ctx, memory.Entry{
-		Input:    input,
-		Analysis: analysis,
-		Time:     time.Now(),
 	})
-
-	// Update goal progress
-	a.goalManager.UpdateProgress(ctx, analysis.GoalImpact)
-
-	// Evolve character preferences
-	a.character.Learn(analysis.Outcomes)
-}
-
-func (a *Agent) buildContext(ctx context.Context, input Input) Context {
-	return CognitiveContext{
-		Goals:      a.goalManager.GetActiveGoals(),
-		TokenState: a.dataManager.GetTokenState(),
-		MarketData: a.dataManager.GetMarketData(),
-		Memory:     a.memory.GetRecent(10),
-	}
 }
 
 func (a *Agent) createRuntime() Runtime {
 	return &agentRuntime{
-		agent: a,
+		agent:     a,
+		memory:    a.memoryManager,
+		data:      a.dataManager,
+		character: a.character,
 	}
-}
-
-// BuildContext collects and preprocesses input, generating context for analysis
-func (a *Agent) BuildContext(ctx context.Context, runtime Runtime, input Input) (CognitiveContext, error) {
-	dataList := []data.Data{}
-	for _, source := range c.sources {
-		// Call BeforeFetch hook
-		if err := source.BeforeFetch(ctx, runtime, input); err != nil {
-			return CognitiveContext{}, fmt.Errorf("before fetch failed: %w", err)
-		}
-
-		data, err := source.Fetch(ctx, runtime, input) // Fetch data from source
-		if err != nil {
-			return CognitiveContext{}, fmt.Errorf("fetch data failed: %w", err)
-		}
-
-		dataList = append(dataList, data)
-	}
-	return CognitiveContext{
-		Goals:      a.goalManager.GetActiveGoals(),
-		TokenState: a.dataManager.GetTokenState(),
-		DataList:   dataList,
-		Memory:     a.memory.GetRecent(10),
-	}, nil
 }

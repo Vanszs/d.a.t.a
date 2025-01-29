@@ -1,23 +1,38 @@
 package memory
 
-import "context"
+import (
+	"context"
 
-type Manager struct {
+	"github.com/carv-protocol/d.a.t.a/src/pkg/database"
+)
+
+type UserInput struct {
+}
+
+type Memory struct {
+}
+
+type Manager interface {
+	FetchContext(ctx context.Context, userInput UserInput) ([]Memory, error)
+}
+
+type managerImpl struct {
 	workingMemory  WorkingMemory
 	longTermMemory LongTermMemory
 }
 
-func NewManager(workingMemory WorkingMemory, longTermMemory LongTermMemory) *Manager {
-	return &Manager{
-		workingMemory:  workingMemory,
-		longTermMemory: longTermMemory,
-	}
+func NewManager(store database.Store) *managerImpl {
+	return &managerImpl{}
 }
 
-func (m *Manager) Add(ctx context.Context, entry Entry) error {
+func (m *managerImpl) Add(ctx context.Context, entry Entry) error {
 	return m.workingMemory.Add(ctx, entry)
 }
 
-func (m *Manager) StoreFailure(ctx context.Context, entry Entry) error {
+func (m *managerImpl) FetchContext(ctx context.Context, userInput UserInput) ([]Memory, error) {
+	return nil, nil
+}
+
+func (m *managerImpl) StoreFailure(ctx context.Context, entry Entry) error {
 	return m.longTermMemory.Store(ctx, entry)
 }

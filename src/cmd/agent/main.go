@@ -2,69 +2,154 @@ package main
 
 import (
 	"context"
-	"flag"
+	"log"
 	"os"
 	"os/signal"
+	"plugin"
 	"syscall"
 
-	character "github.com/carv-protocol/d.a.t.a/src/characters"
+	"github.com/carv-protocol/d.a.t.a/src/characters"
 	"github.com/carv-protocol/d.a.t.a/src/internal/core"
 	"github.com/carv-protocol/d.a.t.a/src/internal/data"
-	"github.com/carv-protocol/d.a.t.a/src/pkg/llm"
-	"github.com/carv-protocol/d.a.t.a/src/pkg/logger"
+	"github.com/carv-protocol/d.a.t.a/src/internal/memory"
+	"github.com/carv-protocol/d.a.t.a/src/internal/token"
+	"github.com/carv-protocol/d.a.t.a/src/pkg/database/adapters"
+	"github.com/carv-protocol/d.a.t.a/src/pkg/llm/openai"
+	"github.com/google/uuid"
+
+	"github.com/spf13/viper"
 )
 
+type Config struct {
+	Character struct {
+		Path string `mapstructure:"path"`
+	} `mapstructure:"character"`
+
+	Database struct {
+		Type string `mapstructure:"type"`
+		Path string `mapstructure:"path"`
+	} `mapstructure:"database"`
+
+	LLM struct {
+		Provider string `mapstructure:"provider"`
+		APIKey   string `mapstructure:"api_key"`
+		BaseURL  string `mapstructure:"base_url"`
+	} `mapstructure:"llm"`
+
+	Data struct {
+		CarvID struct {
+			URL    string `mapstructure:"url"`
+			APIKey string `mapstructure:"api_key"`
+		} `mapstructure:"carvid"`
+	} `mapstructure:"data"`
+}
+
+func loadConfig() (*Config, error) {
+	viper.SetConfigName("config")
+	viper.SetConfigType("yaml")
+	viper.AddConfigPath(".")
+	viper.AddConfigPath("./config")
+
+	// Load .env file
+	viper.SetConfigName(".env")
+	viper.SetConfigType("env")
+	viper.AddConfigPath(".")
+
+	// Environment variables take precedence
+	viper.AutomaticEnv()
+	viper.SetEnvPrefix("DATA")
+
+	// Default values
+	viper.SetDefault("database.type", "sqlite")
+	viper.SetDefault("database.path", "./data/data.db")
+	viper.SetDefault("llm.provider", "openai")
+	viper.SetDefault("llm.base_url", "https://api.openai.com/v1")
+
+	if err := viper.ReadInConfig(); err != nil {
+		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
+			return nil, err
+		}
+	}
+
+	var config Config
+	if err := viper.Unmarshal(&config); err != nil {
+		return nil, err
+	}
+
+	return &config, nil
+}
+
 func main() {
-	// Parse command line flags
-	characterPath := flag.String("character", "", "Path to character config file")
-	llmEndpoint := flag.String("llm-endpoint", "", "LLM service endpoint")
-	dataEndpoint := flag.String("data-endpoint", "", "Data service endpoint")
-	flag.Parse()
+	ctx := context.Background()
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	config, err := loadConfig()
+	if err != nil {
+		log.Fatalf("Failed to load config: %v", err)
+	}
 
-	// Initialize components
-	log := logger.GetLogger()
+	// Setup database
+	store := adapters.NewSQLiteStore(config.Database.Path)
+	if err := store.Connect(ctx); err != nil {
+		log.Fatalf("Failed to connect to database: %v", err)
+	}
+
+	// Setup LLM client
+	llmClient := openai.NewClient(config.LLM.APIKey)
+
+	dataManager := data.NewManager(llmClient)
+	memoryManager := memory.NewManager(store)
+	tokenManager := token.NewTokenManager(dataManager)
+
+	stakeholderManager := token.NewStakeholderManager(memoryManager, tokenManager)
 
 	// Load character
-	character, err := character.LoadFromFile(*characterPath)
+	character, err := characters.LoadFromFile(config.Character.Path)
 	if err != nil {
 		log.Fatalf("Failed to load character: %v", err)
 	}
 
-	// Initialize services
-	llmClient := llm.NewClient(*llmEndpoint)
-	dataManager := data.NewManager(*dataEndpoint)
-
-	// Create agent
-	agent, err := core.NewAgent(core.AgentConfig{
-		Character:   character,
-		LLMClient:   llmClient,
-		DataManager: dataManager,
-	})
-	if err != nil {
-		log.Fatalf("Failed to create agent: %v", err)
+	analysisPlugin := &plugin.Plugin{
+		// Plugin implements new capabilities
 	}
 
-	// Start autonomous loop
-	agent.StartAutonomousLoop(ctx)
-	log.Info("Agent started autonomous operations")
+	// Initialize system
+	system := core.NewAgentSystem(core.AgentSystemConfig{
+		TokenManager:       tokenManager,
+		StakeholderManager: stakeholderManager,
+	})
 
-	// Handle shutdown gracefully
+	// Add agents
+	system.AddAgent(core.AgentConfig{
+		ID: uuid.New(),
+
+		Character: character,
+		// Goals: []Goal{
+		// 	{ID: "profit", Weight: 0.7},
+		// 	{ID: "risk_management", Weight: 0.3},
+		// },
+	})
+
+	system.RegisterPlugin(analysisPlugin)
+
+	// Start system
+	if err := system.Start(); err != nil {
+		log.Fatal(err)
+	}
+
+	// Wait for shutdown signal
+	<-handleShutdown(ctx, system)
+}
+
+func handleShutdown(ctx context.Context, system *core.AgentSystem) chan struct{} {
+	done := make(chan struct{})
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 
-	select {
-	case <-sigChan:
-		log.Info("Shutdown signal received")
-		cancel()
-	case <-ctx.Done():
-		log.Info("Context cancelled")
-	}
+	go func() {
+		<-sigChan
+		system.Shutdown(ctx)
+		close(done)
+	}()
 
-	log.Info("Shutting down gracefully...")
-	if err := agent.Shutdown(ctx); err != nil {
-		log.Errorf("Error during shutdown: %v", err)
-	}
+	return done
 }

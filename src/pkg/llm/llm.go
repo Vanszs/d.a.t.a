@@ -1,17 +1,15 @@
 package llm
 
-import "context"
+import (
+	"context"
+
+	"github.com/carv-protocol/d.a.t.a/src/pkg/llm/openai"
+)
 
 type State struct {
 	Prompt string
 }
 
 type Client interface {
-	GenerateText(ctx context.Context, state State) (string, error)
-}
-
-type clientImpl struct{}
-
-func NewClient() Client {
-	return &clientImpl{}
+	CreateCompletion(ctx context.Context, request openai.CompletionRequest) (string, error)
 }

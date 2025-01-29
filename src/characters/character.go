@@ -1,7 +1,6 @@
 package characters
 
 type Character struct {
-	ID               string
 	Name             string
 	System           string
 	Bio              []string
