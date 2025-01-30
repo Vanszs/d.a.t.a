@@ -19,6 +19,7 @@ type Task struct {
 	Title                    string
 	Description              string
 	Priority                 float64
+	AgentID                  string
 	Status                   TaskStatus
 	Metrics                  map[string]Metric
 	Deadline                 *time.Time

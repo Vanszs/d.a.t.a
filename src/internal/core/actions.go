@@ -1,20 +1,34 @@
 package core
 
 import (
+	"context"
 	"fmt"
 	"sync"
 	"time"
 )
 
+// ActionType defines the type of action to be executed
+type ActionType string
+
 // Action represents an action waiting to be executed
 type Action struct {
 	ID           string
 	Name         string
-	Type         string
+	Type         ActionType
 	Parameters   map[string]interface{}
 	Priority     float64
 	Deadline     time.Time
 	Dependencies []string // IDs of actions that must complete first
+}
+
+func (a *Action) Execute(ctx context.Context) error {
+	// TODO: Implement me
+	return nil
+}
+
+type ActionGeneration struct {
+	Chain   *ThoughtChain
+	Actions []Action
 }
 
 type ActionRegistry struct {
@@ -57,4 +71,38 @@ func (r *ActionRegistry) List() []Action {
 		actions = append(actions, action)
 	}
 	return actions
+}
+
+const (
+	ActionTypeStandard     ActionType = "standard"
+	ActionTypeCompound     ActionType = "compound"
+	ActionTypeConditional  ActionType = "conditional"
+	ActionTypeVerification ActionType = "verification"
+)
+
+// convertThoughtChainToActions converts a thought chain into executable actions
+func convertThoughtChainToActions(chain *ThoughtChain) ([]Action, error) {
+	var actions []Action
+
+	// Track dependencies between actions
+	// dependencies := make(map[string][]string)
+
+	var relevantSteps []*ThoughtStep
+
+	// 1. Collect only contributing steps
+	for _, step := range chain.Steps {
+		if step.ContributesToOutcome {
+			relevantSteps = append(relevantSteps, step)
+		}
+	}
+
+	// Process each thought step
+	// for i, step := range relevantSteps {
+
+	// }
+
+	// Update actions with dependencies
+	// actions = updateActionDependencies(actions, dependencies)
+
+	return actions, nil
 }

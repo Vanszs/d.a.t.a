@@ -47,6 +47,7 @@ func NewTwitterClient() (*TwitterClient, error) {
 	}, nil
 }
 
-func (t *TwitterClient) PostTweet(tweet string) error {
+func (t *TwitterClient) Tweet(tweet string) error {
+	// implement me
 	return nil
 }

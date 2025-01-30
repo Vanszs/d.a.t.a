@@ -23,3 +23,19 @@ type SocialClientImpl struct {
 func NewSocialClient() *SocialClientImpl {
 	return &SocialClientImpl{}
 }
+
+func (sc *SocialClientImpl) SendMessage(msg SocialMessage) error {
+	switch msg.Platform {
+	case "twitter":
+		return sc.twitterClient.Tweet(msg.Content)
+	// case "discord":
+	// 	return sc.discordBot.SendMessage(msg.Content)
+	case "all":
+		// Send to all platforms
+		if err := sc.twitterClient.Tweet(msg.Content); err != nil {
+			return err
+		}
+		// return sc.discordBot.SendMessage(msg.Content)
+	}
+	return nil
+}

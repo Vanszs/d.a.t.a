@@ -21,6 +21,7 @@ type StakeholderManager struct {
 // StakeholderInput represents processed input from social media
 type StakeholderInput struct {
 	StakeholderID string
+	InputIntent   InputIntent
 	Platform      string // "twitter", "discord"
 	MessageID     string
 	Content       string
@@ -52,7 +53,7 @@ type SocialMessage struct {
 	Type        MessageType
 	Content     string
 	Platform    string
-	TargetUsers []string
+	TargetAgent string
 	Timestamp   time.Time
 	Context     map[string]interface{}
 }
@@ -269,6 +270,7 @@ func (mp *MessageParser) Parse(msg SocialMessage) (*StakeholderInput, error) {
 		StakeholderID: msg.UserID,
 		Platform:      msg.Platform,
 		MessageID:     uuid.New().String(),
+		InputIntent:   ,
 		Content:       msg.Content,
 		Timestamp:     msg.Timestamp,
 		Preferences:   prefs,
@@ -319,7 +321,7 @@ type PreferenceExtractor struct {
 
 func (pe *PreferenceExtractor) Extract(content string) (map[string]interface{}, error) {
 	prefs := make(map[string]interface{})
-	// use llm to generate preferences
+	// Implement me
 
 	return prefs, nil
 }

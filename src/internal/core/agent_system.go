@@ -29,9 +29,9 @@ type SystemState struct {
 	GlobalMetrics GlobalMetrics
 
 	// Token and stakeholder information
-	TokenState             *token.TokenState
+	// TokenState             *token.TokenState
 	StakeholderPreferences map[string]interface{}
-	ActiveVotes            map[string][]token.Vote
+	// ActiveVotes            map[string][]token.Vote
 
 	// Task and action information
 	ActiveTasks    map[string]*tasks.Task
@@ -117,6 +117,8 @@ func (s *AgentSystem) evaluateAndExecuteTasks() {
 	// Get current system state
 	state := s.getCurrentState()
 
+	prefs, _ := s.stakeholders.GetAggregatedPreferences(s.ctx)
+
 	// Evaluate tasks for each agent
 	for _, agent := range s.agents {
 		tasks := agent.EvaluateTasks(state)
@@ -129,7 +131,13 @@ func (s *AgentSystem) evaluateAndExecuteTasks() {
 			}
 
 			// Execute task
-			s.taskScheduler.ScheduleTask(task)
+			result, err := agent.ExecuteTask(s.ctx, task, prefs)
+			if err != nil {
+				return err
+			}
+
+			// Report results
+			s.reportTaskResults(task, result)
 		}
 	}
 }
@@ -156,7 +164,7 @@ func (s *AgentSystem) getCurrentState() *SystemState {
 }
 
 // Stakeholder feedback collection
-func (s *AgentSystem) requestStakeholderFeedback(task tasks.Task) {
+func (s *AgentSystem) requestStakeholderFeedback(task *tasks.Task) {
 	// Prepare feedback request message
 	msg := token.SocialMessage{
 		Type:     TypeFeedbackRequest,
@@ -217,20 +225,19 @@ func (s *AgentSystem) processStakeholderMessage(msg token.SocialMessage) error {
 }
 
 // Task execution with stakeholder influence
-func (s *AgentSystem) executeTask(task Task) {
+func (s *AgentSystem) executeTask(task tasks.Task) error {
 	// Get current stakeholder preferences
 	prefs, err := s.stakeholders.GetAggregatedPreferences(s.ctx)
 	if err != nil {
-		s.handleError(err)
-		return
+		return err
 	}
 
 	// Execute task with preferences
 	agent := s.agents[task.AgentID]
-	result, err := agent.ExecuteTask(s.ctx, task, ExecutionConfig{
-		StakeholderPreferences: prefs,
-		Constraints:            s.getCurrentConstraints(),
-	})
+	result, err := agent.ExecuteTask(s.ctx, task, prefs)
+	if err != nil {
+		return err
+	}
 
 	// Report results
 	s.reportTaskResults(task, result)
@@ -246,7 +253,7 @@ func (s *AgentSystem) reportTaskResults(task Task, result TaskResult) {
 	}
 
 	// Send update to social platforms
-	s.socialConnector.SendMessage(msg)
+	s.socialClient.SendMessage(msg)
 
 	// Store results
 	s.storeTaskResult(task, result)

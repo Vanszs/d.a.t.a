@@ -5,7 +5,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/carv-protocol/d.a.t.a/src/internal/tasks"
 	"github.com/google/uuid"
 )
 
@@ -19,7 +18,7 @@ type Job struct {
 	ID       string
 	Interval time.Duration
 	LastRun  time.Time
-	Task     func()
+	JobFunc  func()
 	ticker   *time.Ticker
 	cancel   context.CancelFunc
 }
@@ -31,27 +30,7 @@ func NewScheduler() *Scheduler {
 	}
 }
 
-func (s *Scheduler) ScheduleTask(ctx context.Context, task tasks.Task) string {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	job := &Job{
-		ID:     uuid.New().String(),
-		Task:   task,
-		cancel: cancel,
-	}
-
-	go func() {
-		job.Task()
-		job.LastRun = time.Now()
-		job.cancel()
-	}()
-
-	s.jobs[job.ID] = job
-	return job.ID
-}
-
-func (s *Scheduler) SchedulePeriodic(ctx context.Context, interval time.Duration, task func()) string {
+func (s *Scheduler) SchedulePeriodic(ctx context.Context, interval time.Duration, jobFunc func()) string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -59,7 +38,7 @@ func (s *Scheduler) SchedulePeriodic(ctx context.Context, interval time.Duration
 	job := &Job{
 		ID:       uuid.New().String(),
 		Interval: interval,
-		Task:     task,
+		JobFunc:  jobFunc,
 		ticker:   time.NewTicker(interval),
 		cancel:   cancel,
 	}
@@ -68,7 +47,7 @@ func (s *Scheduler) SchedulePeriodic(ctx context.Context, interval time.Duration
 		for {
 			select {
 			case <-job.ticker.C:
-				job.Task()
+				job.JobFunc()
 				job.LastRun = time.Now()
 			case <-jobCtx.Done():
 				job.ticker.Stop()
