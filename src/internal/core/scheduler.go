@@ -4,6 +4,9 @@ import (
 	"context"
 	"sync"
 	"time"
+
+	"github.com/carv-protocol/d.a.t.a/src/internal/tasks"
+	"github.com/google/uuid"
 )
 
 type Scheduler struct {
@@ -26,6 +29,26 @@ func NewScheduler() *Scheduler {
 		jobs:     make(map[string]*Job),
 		shutdown: make(chan struct{}),
 	}
+}
+
+func (s *Scheduler) ScheduleTask(ctx context.Context, task tasks.Task) string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	job := &Job{
+		ID:     uuid.New().String(),
+		Task:   task,
+		cancel: cancel,
+	}
+
+	go func() {
+		job.Task()
+		job.LastRun = time.Now()
+		job.cancel()
+	}()
+
+	s.jobs[job.ID] = job
+	return job.ID
 }
 
 func (s *Scheduler) SchedulePeriodic(ctx context.Context, interval time.Duration, task func()) string {

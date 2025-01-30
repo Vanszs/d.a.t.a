@@ -1,19 +1,20 @@
 package core
 
 import (
-	"context"
 	"fmt"
 	"sync"
+	"time"
 )
 
-type Action interface {
-	Name() string
-	Description() string
-	Type() ActionType
-	ValidateParams(params map[string]interface{}) error
-	Execute(ctx context.Context, runtime Runtime) error
-	RequiresApproval() bool
-	EstimateImpact(context Context) Impact
+// Action represents an action waiting to be executed
+type Action struct {
+	ID           string
+	Name         string
+	Type         string
+	Parameters   map[string]interface{}
+	Priority     float64
+	Deadline     time.Time
+	Dependencies []string // IDs of actions that must complete first
 }
 
 type ActionRegistry struct {
@@ -31,7 +32,7 @@ func (r *ActionRegistry) Register(action Action) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	name := action.Name()
+	name := action.Name
 	if _, exists := r.actions[name]; exists {
 		return fmt.Errorf("action %s already registered", name)
 	}

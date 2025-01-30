@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/carv-protocol/d.a.t.a/src/internal/tasks"
 	"github.com/carv-protocol/d.a.t.a/src/internal/token"
 )
 
@@ -20,14 +21,32 @@ type AgentSystem struct {
 	cancel        context.CancelFunc
 }
 
-// Message types for different interactions
-type MessageType string
+// SystemState represents the complete state of the agent system
+type SystemState struct {
+	// General system information
+	Timestamp     time.Time
+	AgentStates   map[string]*AgentState
+	GlobalMetrics GlobalMetrics
 
-const (
-	TypeFeedbackRequest MessageType = "FEEDBACK_REQUEST"
-	TypeStatusUpdate    MessageType = "STATUS_UPDATE"
-	TypeAlert           MessageType = "ALERT"
-)
+	// Token and stakeholder information
+	TokenState             *token.TokenState
+	StakeholderPreferences map[string]interface{}
+	ActiveVotes            map[string][]token.Vote
+
+	// Task and action information
+	ActiveTasks    map[string]*tasks.Task
+	PendingActions []Action
+	ExecutionQueue []string // Task IDs in execution queue
+}
+
+// GlobalMetrics tracks system-wide metrics
+type GlobalMetrics struct {
+	TotalTransactions   uint64
+	ActiveStakeholders  uint64
+	SystemUptime        time.Duration
+	TotalTasksProcessed uint64
+	SuccessRate         float64
+}
 
 type AgentSystemConfig struct {
 	TokenManager       *token.TokenManager
@@ -51,7 +70,7 @@ func NewAgentSystem(config AgentSystemConfig) *AgentSystem {
 }
 
 func (s *AgentSystem) AddAgent(agentConfig AgentConfig) {
-	s.agents[agentConfig.ID] = NewAgent(agentConfig)
+	s.agents[agentConfig.ID.String()] = newAgent(agentConfig)
 }
 
 // Main system routines
@@ -115,10 +134,31 @@ func (s *AgentSystem) evaluateAndExecuteTasks() {
 	}
 }
 
+// In your agent_system.go
+func (s *AgentSystem) getCurrentState() *SystemState {
+	state := NewSystemState()
+
+	// Update agent states
+	for id, agent := range s.agents {
+		state.UpdateAgentState(id, agent.GetState())
+	}
+
+	// Update global metrics
+	state.UpdateMetrics(s.calculateGlobalMetrics())
+
+	// Update token state
+	state.TokenState = s.stakeholders.GetTokenState()
+
+	// Update tasks
+	state.ActiveTasks = s.taskScheduler.GetActiveTasks()
+
+	return state
+}
+
 // Stakeholder feedback collection
-func (s *AgentSystem) requestStakeholderFeedback(task Task) {
+func (s *AgentSystem) requestStakeholderFeedback(task tasks.Task) {
 	// Prepare feedback request message
-	msg := SocialMessage{
+	msg := token.SocialMessage{
 		Type:     TypeFeedbackRequest,
 		Content:  s.generateFeedbackRequest(task),
 		Platform: "all",
@@ -148,12 +188,11 @@ func (s *AgentSystem) monitorSocialInputs() {
 	}
 }
 
-func (s *AgentSystem) processStakeholderMessage(msg Message) {
+func (s *AgentSystem) processStakeholderMessage(msg token.SocialMessage) error {
 	// Process message and update stakeholder state
 	input, err := s.stakeholders.ProcessMessage(s.ctx, msg)
 	if err != nil {
-		s.handleError(err)
-		return
+		return err
 	}
 
 	// Update affected agents

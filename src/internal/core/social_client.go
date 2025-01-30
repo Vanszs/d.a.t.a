@@ -6,7 +6,7 @@ type SocialClient interface {
 }
 
 type SocialMessage struct {
-	Type        MessageType
+	Type        string
 	Content     string
 	Platform    string
 	TargetUsers []string

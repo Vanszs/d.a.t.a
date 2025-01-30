@@ -120,9 +120,11 @@ func main() {
 
 	// Add agents
 	system.AddAgent(core.AgentConfig{
-		ID: uuid.New(),
-
-		Character: character,
+		ID:            uuid.New(),
+		LLMClient:     llmClient,
+		DataManager:   dataManager,
+		MemoryManager: memoryManager,
+		Character:     character,
 		// Goals: []Goal{
 		// 	{ID: "profit", Weight: 0.7},
 		// 	{ID: "risk_management", Weight: 0.3},

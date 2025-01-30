@@ -48,7 +48,27 @@ type AgentConfig struct {
 	}
 }
 
-func NewAgent(config AgentConfig) *Agent {
+type AgentStatus string
+
+const (
+	AgentStatusIdle       AgentStatus = "IDLE"
+	AgentStatusProcessing AgentStatus = "PROCESSING"
+	AgentStatusPaused     AgentStatus = "PAUSED"
+	AgentStatusError      AgentStatus = "ERROR"
+)
+
+// AgentState represents the state of an individual agent
+type AgentState struct {
+	ID          string
+	Status      AgentStatus
+	CurrentTask *tasks.Task
+	Memory      MemoryMetrics
+	Goals       []Goal
+	Performance AgentPerformance
+	LastAction  time.Time
+}
+
+func newAgent(config AgentConfig) *Agent {
 	return &Agent{
 		ID:            config.ID,
 		cognitive:     NewCognitiveEngine(config.LLMClient),
@@ -60,7 +80,11 @@ func NewAgent(config AgentConfig) *Agent {
 	}
 }
 
-func (a *Agent) ExecuteTask(ctx context.Context, task Task, prefs StakeholderPreferences) (TaskResult, error) {
+func (a *Agent) EvaluateTasks(state *SystemState) []tasks.Task {
+	return nil
+}
+
+func (a *Agent) ExecuteTask(ctx context.Context, task tasks.Task, prefs map[string]interface{}) (TaskResult, error) {
 	// 1. Generate samples using GRPO
 	samples := a.cognitive.generateSamples(ctx, task, prefs)
 
