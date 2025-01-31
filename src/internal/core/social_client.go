@@ -3,6 +3,7 @@ package core
 import "github.com/carv-protocol/d.a.t.a/src/pkg/clients"
 
 type SocialClient interface {
+	SendMessage(msg SocialMessage) error
 }
 
 type SocialMessage struct {

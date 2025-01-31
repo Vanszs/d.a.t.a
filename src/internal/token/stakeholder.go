@@ -75,7 +75,7 @@ func NewStakeholderManager(memoryManager memory.Manager, tokenManager *TokenMana
 }
 
 // ProcessMessage handles new input from social media
-func (sm *StakeholderManager) ProcessMessage(ctx context.Context, msg SocialMessage) (*StakeholderInput, error) {
+func (sm *StakeholderManager) ProcessMessage(ctx context.Context, msg *SocialMessage) (*StakeholderInput, error) {
 	// 1. Parse message to understand intent
 	input, err := sm.messageParser.Parse(msg)
 	if err != nil {
@@ -270,7 +270,6 @@ func (mp *MessageParser) Parse(msg SocialMessage) (*StakeholderInput, error) {
 		StakeholderID: msg.UserID,
 		Platform:      msg.Platform,
 		MessageID:     uuid.New().String(),
-		InputIntent:   ,
 		Content:       msg.Content,
 		Timestamp:     msg.Timestamp,
 		Preferences:   prefs,

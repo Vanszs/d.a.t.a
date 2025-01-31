@@ -8,8 +8,9 @@ import (
 
 type TaskResult struct {
 	TaskID    string
-	Task      tasks.Task
+	Task      *tasks.Task
 	Actions   []Action
+	Result    []error
 	Timestamp time.Time
 }
 

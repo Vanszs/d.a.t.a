@@ -2,6 +2,8 @@ package llm
 
 import (
 	"context"
+
+	"github.com/carv-protocol/d.a.t.a/src/config"
 )
 
 type State struct {
@@ -20,4 +22,15 @@ type CompletionRequest struct {
 
 type Client interface {
 	CreateCompletion(ctx context.Context, request CompletionRequest) (string, error)
+}
+
+type clientImpl struct {
+}
+
+func (c *clientImpl) CreateCompletion(ctx context.Context, request CompletionRequest) (string, error) {
+	return "", nil
+}
+
+func NewClient(conf *config.Config) Client {
+	return &clientImpl{}
 }

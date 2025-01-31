@@ -259,7 +259,7 @@ func (e *CognitiveEngine) GenerateActions(ctx context.Context, task *tasks.Task,
 }
 
 // GenerateTasks uses chain-of-thought for tasks planning
-func (e *CognitiveEngine) GenerateTasks(ctx context.Context, state SystemState) (*TaskGeneration, error) {
+func (e *CognitiveEngine) GenerateTasks(ctx context.Context, state *SystemState) (*TaskGeneration, error) {
 	// Build action context
 	taskContext := map[string]interface{}{
 		"state": state,
@@ -798,30 +798,35 @@ func containsAspect(step string, aspect string) bool {
 
 // Helper functions
 func extractThinkingContent(response string) string {
+	// TODO: implement me
 	// Extract content between <think> tags
 	// Implementation details...
 	return ""
 }
 
 func extractEvidence(response string) []string {
+	// TODO: implement me
 	// Extract evidence from response
 	// Implementation details...
 	return nil
 }
 
 func extractAnwser(response string) []string {
+	// TODO: implement me
 	// Extract evidence from response
 	// Implementation details...
 	return nil
 }
 
 func calculateConfidence(response string) float64 {
+	// TODO: implement me
 	// Calculate confidence based on response
 	// Implementation details...
 	return 0.0
 }
 
 func generateAlternativeApproach(chain *ThoughtChain) string {
+	// TODO: implement me
 	// Generate alternative approach based on current chain
 	// Implementation details...
 	return ""

@@ -9,45 +9,21 @@ import (
 	"syscall"
 
 	"github.com/carv-protocol/d.a.t.a/src/characters"
+	"github.com/carv-protocol/d.a.t.a/src/config"
 	"github.com/carv-protocol/d.a.t.a/src/internal/core"
 	"github.com/carv-protocol/d.a.t.a/src/internal/data"
 	"github.com/carv-protocol/d.a.t.a/src/internal/memory"
 	"github.com/carv-protocol/d.a.t.a/src/internal/token"
 	"github.com/carv-protocol/d.a.t.a/src/pkg/database/adapters"
-	"github.com/carv-protocol/d.a.t.a/src/pkg/llm/openai"
+	"github.com/carv-protocol/d.a.t.a/src/pkg/llm"
 	"github.com/google/uuid"
 
 	"github.com/spf13/viper"
 )
 
-type Config struct {
-	Character struct {
-		Path string `mapstructure:"path"`
-	} `mapstructure:"character"`
-
-	Database struct {
-		Type string `mapstructure:"type"`
-		Path string `mapstructure:"path"`
-	} `mapstructure:"database"`
-
-	LLM struct {
-		Provider string `mapstructure:"provider"`
-		APIKey   string `mapstructure:"api_key"`
-		BaseURL  string `mapstructure:"base_url"`
-	} `mapstructure:"llm"`
-
-	Data struct {
-		CarvID struct {
-			URL    string `mapstructure:"url"`
-			APIKey string `mapstructure:"api_key"`
-		} `mapstructure:"carvid"`
-	} `mapstructure:"data"`
-}
-
-func loadConfig() (*Config, error) {
+func loadConfig() (*config.Config, error) {
 	viper.SetConfigName("config")
 	viper.SetConfigType("yaml")
-	viper.AddConfigPath(".")
 	viper.AddConfigPath("./config")
 
 	// Load .env file
@@ -71,12 +47,12 @@ func loadConfig() (*Config, error) {
 		}
 	}
 
-	var config Config
-	if err := viper.Unmarshal(&config); err != nil {
+	var conf config.Config
+	if err := viper.Unmarshal(&conf); err != nil {
 		return nil, err
 	}
 
-	return &config, nil
+	return &conf, nil
 }
 
 func main() {
@@ -94,7 +70,7 @@ func main() {
 	}
 
 	// Setup LLM client
-	llmClient := openai.NewClient(config.LLM.APIKey)
+	llmClient := llm.NewClient(config)
 
 	dataManager := data.NewManager(llmClient)
 	memoryManager := memory.NewManager(store)
@@ -113,42 +89,34 @@ func main() {
 	}
 
 	// Initialize system
-	system := core.NewAgentSystem(core.AgentSystemConfig{
-		TokenManager:       tokenManager,
-		StakeholderManager: stakeholderManager,
+	agent := core.NewAgent(core.AgentConfig{
+		ID:            uuid.New(),
+		Character:     character,
+		LLMClient:     llmClient,
+		DataManager:   dataManager,
+		MemoryManager: memoryManager,
+		Stakeholders:  stakeholderManager,
 	})
 
-	// Add agents
-	system.AddAgent(core.AgentConfig{
-		ID:          uuid.New(),
-		LLMClient:   llmClient,
-		DataManager: dataManager,
-		Character:   character,
-		// Goals: []Goal{
-		// 	{ID: "profit", Weight: 0.7},
-		// 	{ID: "risk_management", Weight: 0.3},
-		// },
-	})
-
-	system.RegisterPlugin(analysisPlugin)
+	agent.RegisterPlugin(analysisPlugin)
 
 	// Start system
-	if err := system.Start(); err != nil {
+	if err := agent.Start(); err != nil {
 		log.Fatal(err)
 	}
 
 	// Wait for shutdown signal
-	<-handleShutdown(ctx, system)
+	<-handleShutdown(ctx, agent)
 }
 
-func handleShutdown(ctx context.Context, system *core.AgentSystem) chan struct{} {
+func handleShutdown(ctx context.Context, agent *core.Agent) chan struct{} {
 	done := make(chan struct{})
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 
 	go func() {
 		<-sigChan
-		system.Shutdown(ctx)
+		agent.Shutdown(ctx)
 		close(done)
 	}()
 

@@ -18,7 +18,7 @@ type Job struct {
 	ID       string
 	Interval time.Duration
 	LastRun  time.Time
-	JobFunc  func()
+	JobFunc  func() error
 	ticker   *time.Ticker
 	cancel   context.CancelFunc
 }
@@ -30,7 +30,7 @@ func NewScheduler() *Scheduler {
 	}
 }
 
-func (s *Scheduler) SchedulePeriodic(ctx context.Context, interval time.Duration, jobFunc func()) string {
+func (s *Scheduler) SchedulePeriodic(ctx context.Context, interval time.Duration, jobFunc func() error, wg *sync.WaitGroup) string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -44,9 +44,11 @@ func (s *Scheduler) SchedulePeriodic(ctx context.Context, interval time.Duration
 	}
 
 	go func() {
+		defer wg.Done()
 		for {
 			select {
 			case <-job.ticker.C:
+				// TODO: add error handling
 				job.JobFunc()
 				job.LastRun = time.Now()
 			case <-jobCtx.Done():

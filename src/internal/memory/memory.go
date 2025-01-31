@@ -17,8 +17,8 @@ type Memory struct {
 }
 
 type Manager interface {
-	FetchContext(ctx context.Context, userInput UserInput) ([]Memory, error)
-	GetMemory(ctx context.Context, memoryID string) ([]Memory, error)
+	FetchContext(ctx context.Context, userInput UserInput) ([]*Memory, error)
+	GetMemory(ctx context.Context, memoryID string) (*Memory, error)
 }
 
 type managerImpl struct {
@@ -37,7 +37,7 @@ func (m *managerImpl) Add(ctx context.Context, entry Entry) error {
 	return m.workingMemory.Add(ctx, entry)
 }
 
-func (m *managerImpl) FetchContext(ctx context.Context, userInput UserInput) ([]Memory, error) {
+func (m *managerImpl) FetchContext(ctx context.Context, userInput UserInput) ([]*Memory, error) {
 	return nil, nil
 }
 
@@ -48,6 +48,11 @@ func (m *managerImpl) StoreFailure(ctx context.Context, entry Entry) error {
 // GetState is a generic function to retrieve any type of state
 func (m *managerImpl) GetState(ctx context.Context, id string, result interface{}) error {
 	return nil
+}
+
+// GetState is a generic function to retrieve any type of state
+func (m *managerImpl) GetMemory(ctx context.Context, memoryID string) (*Memory, error) {
+	return nil, nil
 }
 
 // SaveState is a generic function to save any type of state
