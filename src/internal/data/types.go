@@ -3,6 +3,8 @@ package data
 import (
 	"context"
 	"time"
+
+	"github.com/carv-protocol/d.a.t.a/src/pkg/llm"
 )
 
 type DataSources interface {
@@ -26,5 +28,5 @@ type IdentityInfo struct {
 type Provider interface {
 	Name() string
 	Initialize(ctx context.Context) error
-	GetData(ctx context.Context, query Query) (interface{}, error)
+	// GetData(ctx context.Context, query Query) (interface{}, error)
 }

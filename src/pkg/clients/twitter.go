@@ -6,13 +6,14 @@ import (
 
 	"github.com/michimani/gotwi"
 	"github.com/michimani/gotwi/fields"
+	"github.com/michimani/gotwi/resources"
 	"github.com/michimani/gotwi/user/userlookup"
 	"github.com/michimani/gotwi/user/userlookup/types"
 )
 
 type TwitterClient struct {
-	client gotwi.Client
-	user   *types.User
+	client *gotwi.Client
+	user   *resources.User
 }
 
 func NewTwitterClient() (*TwitterClient, error) {
@@ -43,7 +44,7 @@ func NewTwitterClient() (*TwitterClient, error) {
 	}
 	return &TwitterClient{
 		client: c,
-		user:   u,
+		user:   &u.Data,
 	}, nil
 }
 

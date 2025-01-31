@@ -100,7 +100,7 @@ type AgentState struct {
 func NewAgent(config AgentConfig) *Agent {
 	return &Agent{
 		ID:            config.ID,
-		cognitive:     NewCognitiveEngine(config.LLMClient),
+		cognitive:     NewCognitiveEngine(config.LLMClient, config.Character),
 		memoryManager: config.MemoryManager,
 		character:     config.Character,
 		dataManager:   config.DataManager,

@@ -16,8 +16,9 @@ type CharacterConfig struct {
 		Actions     []string `json:"actions"`
 		Constraints []string `json:"constraints"`
 	} `json:"style"`
-	Topics []string `json:"topics"`
-	Goals  []Goal   `json:"goals"`
+	Topics      []string           `json:"topics"`
+	Goals       []Goal             `json:"goals"`
+	Preferences map[string]float64 `json:"preferences"`
 }
 
 type Goal struct {

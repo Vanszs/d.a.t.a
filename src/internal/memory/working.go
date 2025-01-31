@@ -13,12 +13,12 @@ type workingMemoryImpl struct {
 	mu     sync.RWMutex
 }
 
-func NewWorkingMemory(size int) WorkingMemory {
-	return &workingMemoryImpl{
-		buffer: ring.New(size),
-		size:   size,
-	}
-}
+// func NewWorkingMemory(size int) WorkingMemory {
+// 	return &workingMemoryImpl{
+// 		buffer: ring.New(size),
+// 		size:   size,
+// 	}
+// }
 
 func (w *workingMemoryImpl) Add(ctx context.Context, entry Entry) error {
 	w.mu.Lock()

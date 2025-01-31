@@ -44,7 +44,7 @@ func (m *managerImpl) Register(ctx context.Context, source DataSource) error {
 	}
 
 	if err := source.Initialize(ctx); err != nil {
-		return fmt.Errorf("failed to initialize plugin %s: %w", plugin.Name(), err)
+		return fmt.Errorf("failed to initialize source %s: %w", source.Name(), err)
 	}
 
 	m.sources[source.Name()] = source

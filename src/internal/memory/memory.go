@@ -17,14 +17,15 @@ type Memory struct {
 }
 
 type Manager interface {
-	FetchContext(ctx context.Context, userInput UserInput) ([]*Memory, error)
-	GetMemory(ctx context.Context, memoryID string) (*Memory, error)
+	CreateMemory(ctx context.Context, memory Memory) error
+	GetMemory(ctx context.Context, id string) (*Memory, error)
+	ListMemories(ctx context.Context, filter MemoryFilter) ([]*Memory, error)
+	DeleteMemory(ctx context.Context, id string) error
+	SearchByEmbedding(ctx context.Context, embedding []float64, opts SearchOptions) ([]*Memory, error)
 }
 
 type managerImpl struct {
-	workingMemory  WorkingMemory
-	longTermMemory LongTermMemory
-	store          database.Store
+	store database.Store
 }
 
 func NewManager(store database.Store) *managerImpl {
@@ -33,29 +34,25 @@ func NewManager(store database.Store) *managerImpl {
 	}
 }
 
-func (m *managerImpl) Add(ctx context.Context, entry Entry) error {
-	return m.workingMemory.Add(ctx, entry)
+func (m *managerImpl) CreateMemory(ctx context.Context, memory Memory) error {
+	return m.store.Insert(ctx, "memory", map[string]interface{}{})
 }
 
-func (m *managerImpl) FetchContext(ctx context.Context, userInput UserInput) ([]*Memory, error) {
+func (m *managerImpl) GetMemory(ctx context.Context, id string) (*Memory, error) {
 	return nil, nil
 }
 
-func (m *managerImpl) StoreFailure(ctx context.Context, entry Entry) error {
-	return m.longTermMemory.Store(ctx, entry)
+// GetState is a generic function to retrieve any type of state
+func (m *managerImpl) ListMemories(ctx context.Context, filter MemoryFilter) ([]*Memory, error) {
+	return nil, nil
 }
 
 // GetState is a generic function to retrieve any type of state
-func (m *managerImpl) GetState(ctx context.Context, id string, result interface{}) error {
+func (m *managerImpl) DeleteMemory(ctx context.Context, id string) error {
 	return nil
-}
-
-// GetState is a generic function to retrieve any type of state
-func (m *managerImpl) GetMemory(ctx context.Context, memoryID string) (*Memory, error) {
-	return nil, nil
 }
 
 // SaveState is a generic function to save any type of state
-func (m *managerImpl) SaveState(ctx context.Context, id string, state interface{}) error {
-	return nil
+func (m *managerImpl) SearchByEmbedding(ctx context.Context, embedding []float64, opts SearchOptions) ([]*Memory, error) {
+	return nil, nil
 }

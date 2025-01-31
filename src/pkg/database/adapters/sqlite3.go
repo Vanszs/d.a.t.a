@@ -3,9 +3,8 @@ package adapters
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"fmt"
-	"sort"
+	"strings"
 
 	_ "github.com/mattn/go-sqlite3"
 )
@@ -21,146 +20,215 @@ func NewSQLiteStore(dbPath string) *SQLiteStore {
 	}
 }
 
+// Connect establishes connection to the SQLite database
 func (s *SQLiteStore) Connect(ctx context.Context) error {
 	db, err := sql.Open("sqlite3", s.dbPath)
 	if err != nil {
-		return fmt.Errorf("opening sqlite db: %w", err)
+		return fmt.Errorf("failed to open database: %w", err)
 	}
+
+	// Test the connection
+	if err := db.PingContext(ctx); err != nil {
+		db.Close()
+		return fmt.Errorf("failed to ping database: %w", err)
+	}
+
 	s.db = db
+	return nil
+}
 
-	if err := s.createTables(ctx); err != nil {
-		return fmt.Errorf("creating tables: %w", err)
+// CreateTable creates a new table with the given schema
+func (s *SQLiteStore) CreateTable(ctx context.Context, tableName string, schema string) error {
+	if s.db == nil {
+		return fmt.Errorf("database connection not established")
+	}
+
+	// Clean and validate table name to prevent SQL injection
+	tableName = sanitizeIdentifier(tableName)
+	if tableName == "" {
+		return fmt.Errorf("invalid table name")
+	}
+
+	// Create table query
+	query := fmt.Sprintf("CREATE TABLE IF NOT EXISTS %s (%s)", tableName, schema)
+
+	// Execute the query
+	_, err := s.db.ExecContext(ctx, query)
+	if err != nil {
+		return fmt.Errorf("failed to create table %s: %w", tableName, err)
 	}
 
 	return nil
 }
 
-func (s *SQLiteStore) Close() error {
-	return nil
-}
-
-func (s *SQLiteStore) createTables(ctx context.Context) error {
-	queries := []string{
-		`CREATE TABLE IF NOT EXISTS memories (
-            id TEXT PRIMARY KEY,
-            type TEXT NOT NULL,
-            content BLOB,
-            embedding BLOB,
-            metadata TEXT,
-            tags TEXT,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-        )`,
-		`CREATE INDEX IF NOT EXISTS idx_memories_type ON memories(type)`,
-		`CREATE INDEX IF NOT EXISTS idx_memories_created ON memories(created_at)`,
+// Insert adds new data to the specified table
+func (s *SQLiteStore) Insert(ctx context.Context, tableName string, data map[string]interface{}) error {
+	if s.db == nil {
+		return fmt.Errorf("database connection not established")
 	}
 
-	for _, query := range queries {
-		if _, err := s.db.ExecContext(ctx, query); err != nil {
-			return err
+	// Clean table name
+	tableName = sanitizeIdentifier(tableName)
+	if tableName == "" {
+		return fmt.Errorf("invalid table name")
+	}
+
+	// Prepare column names and values
+	var columns []string
+	var placeholders []string
+	var values []interface{}
+
+	for col, val := range data {
+		col = sanitizeIdentifier(col)
+		if col != "" {
+			columns = append(columns, col)
+			placeholders = append(placeholders, "?")
+			values = append(values, val)
 		}
 	}
-	return nil
-}
 
-func (s *SQLiteStore) CreateMemory(ctx context.Context, memory Memory) error {
-	metadata, err := json.Marshal(memory.Metadata)
-	if err != nil {
-		return fmt.Errorf("marshaling metadata: %w", err)
+	if len(columns) == 0 {
+		return fmt.Errorf("no valid columns provided for insert")
 	}
 
-	tags, err := json.Marshal(memory.Tags)
-	if err != nil {
-		return fmt.Errorf("marshaling tags: %w", err)
-	}
-
-	embedding, err := json.Marshal(memory.Embedding)
-	if err != nil {
-		return fmt.Errorf("marshaling embedding: %w", err)
-	}
-
-	query := `
-        INSERT INTO memories (id, type, content, embedding, metadata, tags, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `
-	_, err = s.db.ExecContext(ctx, query,
-		memory.ID,
-		memory.Type,
-		memory.Content,
-		embedding,
-		metadata,
-		tags,
-		memory.CreatedAt,
-		memory.UpdatedAt,
+	// Build the query
+	query := fmt.Sprintf(
+		"INSERT INTO %s (%s) VALUES (%s)",
+		tableName,
+		strings.Join(columns, ", "),
+		strings.Join(placeholders, ", "),
 	)
-	return err
-}
 
-func (s *SQLiteStore) SearchByEmbedding(ctx context.Context, embedding []float64, opts SearchOptions) ([]Memory, error) {
-	// Get all memories first
-	query := `
-        SELECT id, type, content, embedding, metadata, tags, created_at, updated_at
-        FROM memories
-    `
-	rows, err := s.db.QueryContext(ctx, query)
+	// Execute the query
+	_, err := s.db.ExecContext(ctx, query, values...)
 	if err != nil {
-		return nil, fmt.Errorf("querying memories: %w", err)
-	}
-	defer rows.Close()
-
-	var memories []Memory
-	var similarities []float64
-
-	// Calculate similarities and store with memories
-	for rows.Next() {
-		var m Memory
-		var embeddingBlob []byte
-		var metadataStr, tagsStr string
-
-		err := rows.Scan(&m.ID, &m.Type, &m.Content, &embeddingBlob, &metadataStr, &tagsStr, &m.CreatedAt, &m.UpdatedAt)
-		if err != nil {
-			return nil, fmt.Errorf("scanning memory: %w", err)
-		}
-
-		// Unmarshal embedding
-		var memoryEmbedding []float64
-		if err := json.Unmarshal(embeddingBlob, &memoryEmbedding); err != nil {
-			return nil, fmt.Errorf("unmarshaling embedding: %w", err)
-		}
-
-		// Calculate similarity
-		similarity := s.vectorOps.Similarity(embedding, memoryEmbedding)
-
-		// Skip if below minimum similarity
-		if similarity < opts.MinSimilarity {
-			continue
-		}
-
-		// Unmarshal metadata and tags
-		if err := json.Unmarshal([]byte(metadataStr), &m.Metadata); err != nil {
-			return nil, fmt.Errorf("unmarshaling metadata: %w", err)
-		}
-		if err := json.Unmarshal([]byte(tagsStr), &m.Tags); err != nil {
-			return nil, fmt.Errorf("unmarshaling tags: %w", err)
-		}
-
-		memories = append(memories, m)
-		similarities = append(similarities, similarity)
+		return fmt.Errorf("failed to insert data into %s: %w", tableName, err)
 	}
 
-	// Sort by similarity
-	sortMemoriesBySimilarity(memories, similarities)
-
-	// Return top k results
-	if opts.Limit > 0 && opts.Limit < len(memories) {
-		memories = memories[:opts.Limit]
-	}
-
-	return memories, nil
+	return nil
 }
 
-func sortMemoriesBySimilarity(memories []Memory, similarities []float64) {
-	sort.Slice(memories, func(i, j int) bool {
-		return similarities[i] > similarities[j]
-	})
+// Update modifies existing data in the specified table
+func (s *SQLiteStore) Update(ctx context.Context, tableName string, id string, data map[string]interface{}) error {
+	if s.db == nil {
+		return fmt.Errorf("database connection not established")
+	}
+
+	// Clean table name and validate id
+	tableName = sanitizeIdentifier(tableName)
+	if tableName == "" {
+		return fmt.Errorf("invalid table name")
+	}
+	if id == "" {
+		return fmt.Errorf("invalid id")
+	}
+
+	// Prepare SET clause
+	var setStatements []string
+	var values []interface{}
+
+	for col, val := range data {
+		col = sanitizeIdentifier(col)
+		if col != "" {
+			setStatements = append(setStatements, fmt.Sprintf("%s = ?", col))
+			values = append(values, val)
+		}
+	}
+
+	if len(setStatements) == 0 {
+		return fmt.Errorf("no valid columns provided for update")
+	}
+
+	// Add id to values
+	values = append(values, id)
+
+	// Build the query
+	query := fmt.Sprintf(
+		"UPDATE %s SET %s WHERE id = ?",
+		tableName,
+		strings.Join(setStatements, ", "),
+	)
+
+	// Execute the query
+	result, err := s.db.ExecContext(ctx, query, values...)
+	if err != nil {
+		return fmt.Errorf("failed to update data in %s: %w", tableName, err)
+	}
+
+	// Check if any row was affected
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("error checking rows affected: %w", err)
+	}
+	if rows == 0 {
+		return fmt.Errorf("no record found with id: %s", id)
+	}
+
+	return nil
+}
+
+// Delete removes data from the specified table
+func (s *SQLiteStore) Delete(ctx context.Context, tableName string, id string) error {
+	if s.db == nil {
+		return fmt.Errorf("database connection not established")
+	}
+
+	// Clean table name and validate id
+	tableName = sanitizeIdentifier(tableName)
+	if tableName == "" {
+		return fmt.Errorf("invalid table name")
+	}
+	if id == "" {
+		return fmt.Errorf("invalid id")
+	}
+
+	// Build and execute query
+	query := fmt.Sprintf("DELETE FROM %s WHERE id = ?", tableName)
+
+	result, err := s.db.ExecContext(ctx, query, id)
+	if err != nil {
+		return fmt.Errorf("failed to delete data from %s: %w", tableName, err)
+	}
+
+	// Check if any row was affected
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("error checking rows affected: %w", err)
+	}
+	if rows == 0 {
+		return fmt.Errorf("no record found with id: %s", id)
+	}
+
+	return nil
+}
+
+// Close closes the database connection
+func (s *SQLiteStore) Close() error {
+	if s.db != nil {
+		if err := s.db.Close(); err != nil {
+			return fmt.Errorf("failed to close database: %w", err)
+		}
+		s.db = nil
+	}
+	return nil
+}
+
+// Additional helper methods that could be useful
+
+func (s *SQLiteStore) Query(ctx context.Context, tableName string, query string, args ...interface{}) (*sql.Rows, error) {
+	if s.db == nil {
+		return nil, fmt.Errorf("database connection not established")
+	}
+	return s.db.QueryContext(ctx, query, args...)
+}
+
+func (s *SQLiteStore) QueryRow(ctx context.Context, tableName string, query string, args ...interface{}) *sql.Row {
+	return s.db.QueryRowContext(ctx, query, args...)
+}
+
+func (s *SQLiteStore) Begin(ctx context.Context) (*sql.Tx, error) {
+	if s.db == nil {
+		return nil, fmt.Errorf("database connection not established")
+	}
+	return s.db.BeginTx(ctx, nil)
 }

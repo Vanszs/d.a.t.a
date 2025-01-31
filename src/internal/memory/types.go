@@ -5,6 +5,20 @@ import (
 	"time"
 )
 
+type MemoryStore interface {
+	CreateMemory(ctx context.Context, memory Memory) error
+	GetMemory(ctx context.Context, id string) (Memory, error)
+	ListMemories(ctx context.Context, filter MemoryFilter) ([]Memory, error)
+	DeleteMemory(ctx context.Context, id string) error
+	SearchByEmbedding(ctx context.Context, embedding []float64, opts SearchOptions) ([]Memory, error)
+}
+
+type SearchOptions struct {
+}
+
+type MemoryFilter struct {
+}
+
 type Entry struct {
 	ID         string
 	Type       string
@@ -13,26 +27,4 @@ type Entry struct {
 	Timestamp  time.Time
 	Importance float64
 	Tags       []string
-}
-
-type WorkingMemory interface {
-	Add(ctx context.Context, entry Entry) error
-	Get(ctx context.Context, id string) (Entry, error)
-	GetRecent(ctx context.Context, n int) ([]Entry, error)
-	Clear(ctx context.Context) error
-}
-
-type LongTermMemory interface {
-	Store(ctx context.Context, entry Entry) error
-	Retrieve(ctx context.Context, query Query) ([]Entry, error)
-	Update(ctx context.Context, id string, entry Entry) error
-	Delete(ctx context.Context, id string) error
-}
-
-type Query struct {
-	Tags       []string
-	TimeRange  *TimeRange
-	Type       string
-	Importance float64
-	Limit      int
 }

@@ -260,7 +260,7 @@ func NewMessageParser() *MessageParser {
 	}
 }
 
-func (mp *MessageParser) Parse(msg SocialMessage) (*StakeholderInput, error) {
+func (mp *MessageParser) Parse(msg *SocialMessage) (*StakeholderInput, error) {
 	prefs, err := mp.prefExtractor.Extract(msg.Content)
 	if err != nil {
 		return nil, err

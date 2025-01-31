@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/carv-protocol/d.a.t.a/src/characters"
 	"github.com/carv-protocol/d.a.t.a/src/internal/tasks"
 	"github.com/carv-protocol/d.a.t.a/src/internal/token"
 	"github.com/carv-protocol/d.a.t.a/src/pkg/llm"
@@ -37,6 +38,7 @@ type CognitiveEngine struct {
 	maxSteps           int
 	minConfidence      float64
 	stakeholderManager token.StakeholderManager
+	character          *characters.Character
 }
 
 type CognitiveConfig struct {
@@ -95,7 +97,7 @@ type Alternative struct {
 	Selected    bool     // Whether this alternative was chosen
 }
 
-func NewCognitiveEngine(llmClient llm.Client) *CognitiveEngine {
+func NewCognitiveEngine(llmClient llm.Client, character *characters.Character) *CognitiveEngine {
 	return &CognitiveEngine{
 		llm:           llmClient,
 		maxSteps:      10,
@@ -103,6 +105,7 @@ func NewCognitiveEngine(llmClient llm.Client) *CognitiveEngine {
 		basePrompt: `A conversation between User and Assistant. The assistant first thinks about the 
 								reasoning process in the mind and then provides the answer. The reasoning process 
 								and answer are enclosed within <think> </think> and <answer> </answer> tags.`,
+		character: character,
 	}
 }
 
@@ -256,6 +259,31 @@ func (e *CognitiveEngine) GenerateActions(ctx context.Context, task *tasks.Task,
 		Actions: actions,
 		Chain:   chain,
 	}, nil
+}
+
+// GenerateActions uses chain-of-thought for action planning
+func (e *CognitiveEngine) GenerateMessage(ctx context.Context, input interface{}, prefs map[string]interface{}) (string, error) {
+	// Build action context
+	msgContext := map[string]interface{}{
+		"character":   e.character,
+		"preferences": prefs,
+		"goal":        "generate detailed action plan",
+	}
+
+	// Generate initial thought
+	prompt := e.buildPrompt("message", msgContext)
+	response, err := e.llm.CreateCompletion(ctx, llm.CompletionRequest{
+		Model: "deepseek",
+		Messages: []llm.Message{
+			{Role: "system", Content: e.basePrompt},
+			{Role: "user", Content: prompt},
+		},
+	})
+	if err != nil {
+		return "", err
+	}
+
+	return response, nil
 }
 
 // GenerateTasks uses chain-of-thought for tasks planning
