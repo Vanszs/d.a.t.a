@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"os"
 	"os/signal"
@@ -9,37 +10,37 @@ import (
 	"syscall"
 
 	"github.com/carv-protocol/d.a.t.a/src/characters"
-	"github.com/carv-protocol/d.a.t.a/src/config"
 	"github.com/carv-protocol/d.a.t.a/src/internal/core"
 	"github.com/carv-protocol/d.a.t.a/src/internal/data"
 	"github.com/carv-protocol/d.a.t.a/src/internal/memory"
+	"github.com/carv-protocol/d.a.t.a/src/internal/tasks"
 	"github.com/carv-protocol/d.a.t.a/src/internal/token"
 	"github.com/carv-protocol/d.a.t.a/src/pkg/database/adapters"
 	"github.com/carv-protocol/d.a.t.a/src/pkg/llm"
-	"github.com/google/uuid"
 
+	"github.com/google/uuid"
 	"github.com/spf13/viper"
 )
 
-func loadConfig() (*config.Config, error) {
+func loadConfig() (*Config, error) {
 	viper.SetConfigName("config")
 	viper.SetConfigType("yaml")
-	viper.AddConfigPath("./config")
+	viper.AddConfigPath("./src/config")
 
 	// Load .env file
-	viper.SetConfigName(".env")
-	viper.SetConfigType("env")
-	viper.AddConfigPath(".")
+	// TODO: override config with .env
+	// viper.SetConfigName(".env")
+	// viper.SetConfigType("env")
+	// viper.AddConfigPath("./src")
 
 	// Environment variables take precedence
 	viper.AutomaticEnv()
-	viper.SetEnvPrefix("DATA")
 
 	// Default values
 	viper.SetDefault("database.type", "sqlite")
 	viper.SetDefault("database.path", "./data/data.db")
-	viper.SetDefault("llm.provider", "openai")
-	viper.SetDefault("llm.base_url", "https://api.openai.com/v1")
+	viper.SetDefault("llm_config.provider", "openai")
+	viper.SetDefault("llm_config.base_url", "https://api.openai.com/v1")
 
 	if err := viper.ReadInConfig(); err != nil {
 		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
@@ -47,7 +48,7 @@ func loadConfig() (*config.Config, error) {
 		}
 	}
 
-	var conf config.Config
+	var conf Config
 	if err := viper.Unmarshal(&conf); err != nil {
 		return nil, err
 	}
@@ -70,7 +71,8 @@ func main() {
 	}
 
 	// Setup LLM client
-	llmClient := llm.NewClient(config)
+	fmt.Print(config.LLMConfig)
+	llmClient := llm.NewClient((*llm.LLMConfig)(&config.LLMConfig))
 
 	dataManager := data.NewManager(llmClient)
 	memoryManager := memory.NewManager(store)
@@ -88,6 +90,8 @@ func main() {
 		// Plugin implements new capabilities
 	}
 
+	taskStore := tasks.NewTaskStore(store)
+
 	// Initialize system
 	agent := core.NewAgent(core.AgentConfig{
 		ID:            uuid.New(),
@@ -96,11 +100,11 @@ func main() {
 		DataManager:   dataManager,
 		MemoryManager: memoryManager,
 		Stakeholders:  stakeholderManager,
+		TaskManager:   tasks.NewManager(taskStore),
 	})
 
 	agent.RegisterPlugin(analysisPlugin)
 
-	// Start system
 	if err := agent.Start(); err != nil {
 		log.Fatal(err)
 	}

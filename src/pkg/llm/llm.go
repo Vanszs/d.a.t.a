@@ -3,8 +3,14 @@ package llm
 import (
 	"context"
 
-	"github.com/carv-protocol/d.a.t.a/src/config"
+	"github.com/carv-protocol/d.a.t.a/src/pkg/llm/openai"
 )
+
+type LLMConfig struct {
+	Provider string `mapstructure:"provider"`
+	APIKey   string `mapstructure:"api_key"`
+	BaseURL  string `mapstructure:"base_url"`
+}
 
 type State struct {
 	Prompt string
@@ -25,12 +31,38 @@ type Client interface {
 }
 
 type clientImpl struct {
+	provider     string
+	openaiClient *openai.Client
 }
 
 func (c *clientImpl) CreateCompletion(ctx context.Context, request CompletionRequest) (string, error) {
+	switch c.provider {
+	case "openai":
+		return c.openaiClient.CreateCompletion(ctx, openai.CompletionRequest{
+			Model:    request.Model,
+			Messages: toOpenAIMessage(request.Messages),
+		})
+	}
 	return "", nil
 }
 
-func NewClient(conf *config.Config) Client {
+func NewClient(conf *LLMConfig) Client {
+	if conf.Provider == "openai" {
+		return &clientImpl{
+			provider:     conf.Provider,
+			openaiClient: openai.NewClient(conf.APIKey),
+		}
+	}
 	return &clientImpl{}
+}
+
+func toOpenAIMessage(messages []Message) []openai.Message {
+	var openAIMessages []openai.Message
+	for _, message := range messages {
+		openAIMessages = append(openAIMessages, openai.Message{
+			Role:    message.Role,
+			Content: message.Content,
+		})
+	}
+	return openAIMessages
 }

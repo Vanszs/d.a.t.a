@@ -13,6 +13,5 @@ type Character struct {
 
 type StyleGuide struct {
 	Tone        []string
-	Actions     []string
 	Constraints []string
 }

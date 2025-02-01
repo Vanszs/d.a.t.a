@@ -27,7 +27,7 @@ type Agent struct {
 	dataManager   data.Manager
 	plugins       *plugins.PluginRegistry
 	config        AgentConfig
-	log           *zap.SugaredLogger
+	logger        *zap.SugaredLogger
 	stakeholders  *token.StakeholderManager
 	socialClient  SocialClient
 	Goals         []Goal
@@ -65,6 +65,7 @@ type AgentConfig struct {
 	LLMClient     llm.Client
 	DataManager   data.Manager
 	MemoryManager memory.Manager
+	TaskManager   *tasks.Manager
 	Stakeholders  *token.StakeholderManager
 	Training      struct {
 		Enabled       bool
@@ -98,22 +99,28 @@ type AgentState struct {
 }
 
 func NewAgent(config AgentConfig) *Agent {
+	ctx, cancel := context.WithCancel(context.Background())
+	logger, _ := zap.NewProduction()
+
 	return &Agent{
 		ID:            config.ID,
-		cognitive:     NewCognitiveEngine(config.LLMClient, config.Character),
+		cognitive:     NewCognitiveEngine(config.LLMClient, config.Character, logger.Sugar()),
 		memoryManager: config.MemoryManager,
 		character:     config.Character,
 		dataManager:   config.DataManager,
 		config:        config,
-		log:           zap.S(),
+		logger:        logger.Sugar(),
 		stakeholders:  config.Stakeholders,
+		ctx:           ctx,
+		cancel:        cancel,
+		taskManager:   config.TaskManager,
 	}
 }
 
 func (a *Agent) GenerateTasks(ctx context.Context, state *SystemState) ([]*tasks.Task, error) {
 	tasks, err := a.cognitive.GenerateTasks(ctx, state)
 	if err != nil {
-		a.log.Errorw("Failed to evaluate task", "error", err)
+		a.logger.Errorw("Failed to evaluate task", "error", err)
 	}
 
 	return tasks.Tasks, nil
@@ -161,7 +168,7 @@ func (a *Agent) GetState() *AgentState {
 }
 
 func (a *Agent) executeAction(ctx context.Context, action Action) error {
-	a.log.Infow("Executing action", "type", action.Type)
+	a.logger.Infow("Executing action", "type", action.Type)
 
 	// Execute action
 	if err := action.Execute(ctx); err != nil {

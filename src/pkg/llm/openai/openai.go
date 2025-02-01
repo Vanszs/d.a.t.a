@@ -1,17 +1,15 @@
 package openai
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
-	"net/http"
+
+	"github.com/openai/openai-go"
+	"github.com/openai/openai-go/option"
 )
 
 type Client struct {
-	apiKey     string
-	baseURL    string
-	httpClient *http.Client
+	client *openai.Client
 }
 
 type CompletionRequest struct {
@@ -46,99 +44,43 @@ type EmbeddingResponse struct {
 }
 
 func NewClient(apiKey string) *Client {
+	fmt.Println("api key:", apiKey)
+	client := openai.NewClient(
+		option.WithAPIKey(apiKey), // defaults to os.LookupEnv("OPENAI_API_KEY")
+	)
 	return &Client{
-		apiKey:     apiKey,
-		baseURL:    "https://api.openai.com/v1",
-		httpClient: &http.Client{},
+		client: client,
 	}
 }
 
 func (c *Client) CreateCompletion(ctx context.Context, req CompletionRequest) (string, error) {
-	data, err := json.Marshal(req)
-	if err != nil {
-		return "", fmt.Errorf("marshaling request: %w", err)
-	}
-
-	httpReq, err := http.NewRequestWithContext(
-		ctx,
-		"POST",
-		fmt.Sprintf("%s/chat/completions", c.baseURL),
-		bytes.NewBuffer(data),
+	// TODO: Add more open ai api's ability to create completions
+	fmt.Println(req.Messages)
+	chatCompletion, err := c.client.Chat.Completions.New(
+		context.Background(),
+		openai.ChatCompletionNewParams{
+			Messages: openai.F(c.toOpenAIMessage(req.Messages)),
+			Model:    openai.F(openai.ChatModelGPT4o),
+		},
 	)
+
 	if err != nil {
-		return "", fmt.Errorf("creating request: %w", err)
+		return "", fmt.Errorf("creating completion: %w", err)
 	}
 
-	c.setHeaders(httpReq)
-
-	resp, err := c.httpClient.Do(httpReq)
-	if err != nil {
-		return "", fmt.Errorf("making request: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("API error: %d", resp.StatusCode)
-	}
-
-	var result CompletionResponse
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return "", fmt.Errorf("decoding response: %w", err)
-	}
-
-	if len(result.Choices) == 0 {
-		return "", fmt.Errorf("no completion choices returned")
-	}
-
-	return result.Choices[0].Message.Content, nil
+	fmt.Println(chatCompletion)
+	return chatCompletion.Choices[0].Message.Content, nil
 }
 
-func (c *Client) CreateEmbedding(ctx context.Context, text string) ([]float64, error) {
-	req := EmbeddingRequest{
-		Model: "text-embedding-3-small",
-		Input: text,
+func (c *Client) toOpenAIMessage(messages []Message) []openai.ChatCompletionMessageParamUnion {
+	var openAIMessages []openai.ChatCompletionMessageParamUnion
+	for _, message := range messages {
+		switch message.Role {
+		case string(openai.ChatCompletionSystemMessageParamRoleSystem):
+			openAIMessages = append(openAIMessages, openai.SystemMessage(message.Content))
+		case string(openai.ChatCompletionUserMessageParamRoleUser):
+			openAIMessages = append(openAIMessages, openai.UserMessage(message.Content))
+		}
 	}
-
-	data, err := json.Marshal(req)
-	if err != nil {
-		return nil, fmt.Errorf("marshaling request: %w", err)
-	}
-
-	httpReq, err := http.NewRequestWithContext(
-		ctx,
-		"POST",
-		fmt.Sprintf("%s/embeddings", c.baseURL),
-		bytes.NewBuffer(data),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("creating request: %w", err)
-	}
-
-	c.setHeaders(httpReq)
-
-	resp, err := c.httpClient.Do(httpReq)
-	if err != nil {
-		return nil, fmt.Errorf("making request: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("API error: %d", resp.StatusCode)
-	}
-
-	var result EmbeddingResponse
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return nil, fmt.Errorf("decoding response: %w", err)
-	}
-
-	if len(result.Data) == 0 {
-		return nil, fmt.Errorf("no embeddings returned")
-	}
-
-	return result.Data[0].Embedding, nil
-}
-
-func (c *Client) setHeaders(req *http.Request) {
-	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", c.apiKey))
-	req.Header.Set("Content-Type", "application/json")
+	return openAIMessages
 }

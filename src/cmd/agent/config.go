@@ -1,4 +1,6 @@
-package config
+package main
+
+import "github.com/carv-protocol/d.a.t.a/src/pkg/llm"
 
 type Config struct {
 	Character struct {
@@ -10,11 +12,7 @@ type Config struct {
 		Path string `mapstructure:"path"`
 	} `mapstructure:"database"`
 
-	LLM struct {
-		Provider string `mapstructure:"provider"`
-		APIKey   string `mapstructure:"api_key"`
-		BaseURL  string `mapstructure:"base_url"`
-	} `mapstructure:"llm"`
+	llm.LLMConfig `mapstructure:"llm_config"`
 
 	Data struct {
 		CarvID struct {

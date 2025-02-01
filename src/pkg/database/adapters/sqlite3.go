@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 
 	_ "github.com/mattn/go-sqlite3"
@@ -22,6 +24,14 @@ func NewSQLiteStore(dbPath string) *SQLiteStore {
 
 // Connect establishes connection to the SQLite database
 func (s *SQLiteStore) Connect(ctx context.Context) error {
+	fmt.Println("Connecting to SQLite database...", s.dbPath)
+
+	// Ensure the directory exists
+	dir := filepath.Dir(s.dbPath)
+	if err := os.MkdirAll(dir, os.ModePerm); err != nil {
+		return fmt.Errorf("failed to create directory: %w", err)
+	}
+
 	db, err := sql.Open("sqlite3", s.dbPath)
 	if err != nil {
 		return fmt.Errorf("failed to open database: %w", err)

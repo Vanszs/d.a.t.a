@@ -43,7 +43,7 @@ func (e *CognitiveEngine) detectAhaMoment(
 	}
 
 	// 1. Check for explicit reconsideration language
-	if trigger := e.detectExplicitReconsideration(currentStep.Reasoning); trigger != nil {
+	if trigger := e.detectExplicitReconsideration(currentStep); trigger != nil {
 		return trigger
 	}
 
@@ -66,7 +66,7 @@ func (e *CognitiveEngine) detectAhaMoment(
 }
 
 // detectExplicitReconsideration checks for explicit reconsideration language
-func (e *CognitiveEngine) detectExplicitReconsideration(reasoning *Reasoning) *AhaMomentDetection {
+func (e *CognitiveEngine) detectExplicitReconsideration(step *ThoughtStep) *AhaMomentDetection {
 	// Keywords that indicate an "aha moment"
 	reconsiderationPhrases := map[string]string{
 		"wait":             "Explicit pause for reconsideration",
@@ -80,7 +80,7 @@ func (e *CognitiveEngine) detectExplicitReconsideration(reasoning *Reasoning) *A
 		"we could instead": "Alternative approach proposal",
 	}
 
-	reasoningLower := strings.ToLower(reasoning.Content)
+	reasoningLower := strings.ToLower(step.Content)
 	for phrase, reason := range reconsiderationPhrases {
 		if strings.Contains(reasoningLower, phrase) {
 			return &AhaMomentDetection{
@@ -128,7 +128,7 @@ func (e *CognitiveEngine) detectBetterAlternative(
 ) *AhaMomentDetection {
 	for _, alt := range alternatives {
 		// Score current approach
-		currentScore := e.scoreApproach(currentStep.Reasoning.Content, pref)
+		currentScore := e.scoreApproach(currentStep.Content, pref)
 
 		// Score alternative
 		altScore := e.scoreApproach(alt, pref)
@@ -450,37 +450,18 @@ func findLogicalGaps(current *ThoughtStep, previous []*ThoughtStep) []string {
 	// Check for missing logical connections
 	if len(previous) > 0 {
 		lastStep := previous[len(previous)-1]
-		if !hasLogicalConnection(current.Reasoning.Content, lastStep.Reasoning.Content) {
+		if !hasLogicalConnection(current.Content, lastStep.Content) {
 			gaps = append(gaps, "Missing connection to previous step")
 		}
 	}
 
 	// Check for unsupported assertions
-	if unsupported := findUnsupportedAssertions(current.Reasoning.Content); len(unsupported) > 0 {
+	if unsupported := findUnsupportedAssertions(current.Content); len(unsupported) > 0 {
 		gaps = append(gaps, fmt.Sprintf("Unsupported assertions: %v", unsupported))
 	}
 
 	return gaps
 }
-
-// func findSimplification(current ThoughtStep, previous []ThoughtStep) string {
-// 	// Look for redundant steps that can be combined
-// 	if len(previous) >= 2 {
-// 		last := previous[len(previous)-1]
-// 		secondLast := previous[len(previous)-2]
-
-// 		if canCombineSteps(secondLast, last, current) {
-// 			return generateCombinedStep(secondLast, last, current)
-// 		}
-// 	}
-
-// 	// Check if current step can be simplified
-// 	if simpler := simplifyStep(current.Reasoning); simpler != "" {
-// 		return simpler
-// 	}
-
-// 	return ""
-// }
 
 func hasLogicalConnection(current, previous string) bool {
 	// Check for logical connectors
@@ -499,13 +480,13 @@ func hasLogicalConnection(current, previous string) bool {
 	return false
 }
 
-func findUnsupportedAssertions(reasoning string) []string {
+func findUnsupportedAssertions(content string) []string {
 	var unsupported []string
 
 	// Look for assertions without evidence
-	assertions := findAssertions(reasoning)
+	assertions := findAssertions(content)
 	for _, assertion := range assertions {
-		if !hasEvidenceSupport(assertion, reasoning) {
+		if !hasEvidenceSupport(assertion, content) {
 			unsupported = append(unsupported, assertion)
 		}
 	}
@@ -514,7 +495,7 @@ func findUnsupportedAssertions(reasoning string) []string {
 }
 
 // hasEvidenceSupport checks if an assertion has supporting evidence
-func hasEvidenceSupport(assertion, reasoning string) bool {
+func hasEvidenceSupport(assertion, content string) bool {
 	// Evidence indicators
 	evidenceIndicators := []string{
 		"because", "since", "as shown by",
@@ -523,8 +504,8 @@ func hasEvidenceSupport(assertion, reasoning string) bool {
 		"demonstrated by", "verified through", "tested via",
 	}
 
-	// Find the assertion in the reasoning
-	assertionIndex := strings.Index(strings.ToLower(reasoning), strings.ToLower(assertion))
+	// Find the assertion in the content
+	assertionIndex := strings.Index(strings.ToLower(content), strings.ToLower(assertion))
 	if assertionIndex == -1 {
 		return false
 	}
@@ -532,9 +513,9 @@ func hasEvidenceSupport(assertion, reasoning string) bool {
 	// Look for evidence indicators in the surrounding context
 	contextWindow := 200 // characters to check before and after
 	start := math.Max(0, float64(assertionIndex-contextWindow))
-	end := math.Min(float64(len(reasoning)), float64(assertionIndex+len(assertion)+contextWindow))
+	end := math.Min(float64(len(content)), float64(assertionIndex+len(assertion)+contextWindow))
 
-	context := reasoning[int(start):int(end)]
+	context := content[int(start):int(end)]
 
 	// Check for evidence indicators
 	for _, indicator := range evidenceIndicators {

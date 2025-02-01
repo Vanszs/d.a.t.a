@@ -1,0 +1,24 @@
+character:
+  # Path to character configuration file
+  path: "./src/config/character_data_agent.json"
+
+database:
+  # Database type: "sqlite" or "postgres"
+  type: "sqlite"
+  # Database path (for SQLite) or connection string (for Postgres)
+  path: "./data/agent.db"
+
+llm_config:
+  # LLM provider: "openai", "anthropic", etc.
+  provider: "openai"
+  # API key for the LLM provider
+  api_key: "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"
+  # Base URL for API calls
+  base_url: "https://api.openai.com/v1"
+
+data:
+  carvid:
+    # CarvID API endpoint
+    url: "https://api.carv.io/v1"
+    # API key for CarvID
+    api_key: "your-carvid-api-key-here"

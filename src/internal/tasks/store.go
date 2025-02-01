@@ -11,8 +11,10 @@ type TaskStore struct {
 	db database.Store
 }
 
-func NewTaskStore() *TaskStore {
-	return &TaskStore{}
+func NewTaskStore(db database.Store) *TaskStore {
+	return &TaskStore{
+		db: db,
+	}
 }
 
 func (t *TaskStore) AddTask(ctx context.Context, task Task) error {

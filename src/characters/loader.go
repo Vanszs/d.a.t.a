@@ -13,7 +13,6 @@ type CharacterConfig struct {
 	Lore   []string `json:"lore"`
 	Style  struct {
 		Tone        []string `json:"tone"`
-		Actions     []string `json:"actions"`
 		Constraints []string `json:"constraints"`
 	} `json:"style"`
 	Topics      []string           `json:"topics"`
@@ -50,6 +49,6 @@ func NewCharacter(config CharacterConfig) *Character {
 		Style:       StyleGuide(config.Style),
 		Topics:      config.Topics,
 		Goals:       config.Goals,
-		Preferences: make(map[string]float64),
+		Preferences: config.Preferences,
 	}
 }

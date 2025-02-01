@@ -7,16 +7,11 @@ import (
 	"time"
 
 	"github.com/carv-protocol/d.a.t.a/src/internal/tasks"
-	"github.com/carv-protocol/d.a.t.a/src/internal/token"
 )
-
-type AgentSystemConfig struct {
-	TokenManager       *token.TokenManager
-	StakeholderManager *token.StakeholderManager
-}
 
 // Main system routines
 func (a *Agent) Start() error {
+	a.logger.Info("Starting agent system")
 	var wg sync.WaitGroup
 
 	// Start periodic task evaluation
@@ -43,9 +38,10 @@ func (a *Agent) RegisterPlugin(p *plugin.Plugin) {
 
 // Periodic task evaluation
 func (a *Agent) runPeriodicEvaluation() {
-	ticker := time.NewTicker(5 * time.Minute)
+	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
 
+	a.logger.Infof("First evaluation in %d seconds", 5)
 	for {
 		select {
 		case <-ticker.C:
@@ -57,6 +53,8 @@ func (a *Agent) runPeriodicEvaluation() {
 }
 
 func (a *Agent) evaluateAndExecuteTasks() error {
+	a.logger.Info("Evaluating and executing tasks")
+
 	// Get current system state
 	state := a.getCurrentState()
 
@@ -65,6 +63,7 @@ func (a *Agent) evaluateAndExecuteTasks() error {
 	// Evaluate tasks for each agent
 
 	tasks, _ := a.GenerateTasks(context.Background(), state)
+	a.logger.Infof("Generated tasks: %d", len(tasks))
 
 	for _, task := range tasks {
 		// Check if stakeholder input is needed

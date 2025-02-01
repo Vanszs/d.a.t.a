@@ -38,7 +38,7 @@ type Metric struct {
 }
 
 type Manager struct {
-	store TaskStore
+	store *TaskStore
 }
 
 type TaskSettings struct {
@@ -48,7 +48,7 @@ type TaskSettings struct {
 	MinStakeholderApproval float64
 }
 
-func NewManager(store TaskStore) *Manager {
+func NewManager(store *TaskStore) *Manager {
 	return &Manager{
 		store: store,
 	}
