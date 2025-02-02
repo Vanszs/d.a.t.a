@@ -12,7 +12,7 @@ llm_config:
   # LLM provider: "openai", "anthropic", etc.
   provider: "openai"
   # API key for the LLM provider
-  api_key: "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"
+  api_key: ""
   # Base URL for API calls
   base_url: "https://api.openai.com/v1"
 
