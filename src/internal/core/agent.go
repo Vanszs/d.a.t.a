@@ -74,6 +74,7 @@ type AgentConfig struct {
 	TaskManager   *tasks.Manager
 	Stakeholders  *token.StakeholderManager
 	ActionManager actions.Manager
+	SocialClient  SocialClient
 	ToolsManager  *tools.Manager
 	Training      struct {
 		Enabled       bool
@@ -121,7 +122,7 @@ func NewAgent(config AgentConfig) *Agent {
 		toolManager:   config.ToolsManager,
 		stakeholders:  config.Stakeholders,
 		ctx:           ctx,
-		socialClient:  NewSocialClient(),
+		socialClient:  config.SocialClient,
 		cancel:        cancel,
 		taskManager:   config.TaskManager,
 		actionManager: config.ActionManager,

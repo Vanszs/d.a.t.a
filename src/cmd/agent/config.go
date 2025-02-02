@@ -1,6 +1,9 @@
 package main
 
-import "github.com/carv-protocol/d.a.t.a/src/pkg/llm"
+import (
+	"github.com/carv-protocol/d.a.t.a/src/pkg/clients"
+	"github.com/carv-protocol/d.a.t.a/src/pkg/llm"
+)
 
 type Config struct {
 	Character struct {
@@ -20,4 +23,8 @@ type Config struct {
 			APIKey string `mapstructure:"api_key"`
 		} `mapstructure:"carvid"`
 	} `mapstructure:"data"`
+
+	Social struct {
+		clients.TwitterConfig `mapstructure:"twitter"`
+	} `mapstructure:"social"`
 }

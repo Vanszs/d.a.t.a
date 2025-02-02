@@ -1,6 +1,7 @@
 package core
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -11,6 +12,7 @@ import (
 type SocialClient interface {
 	SendMessage(msg SocialMessage) error
 	GetMessageChannel() chan SocialMessage
+	MonitorMessages() error
 }
 
 // IntentType defines different types of intents
@@ -77,28 +79,60 @@ type SocialClientImpl struct {
 	socialMsgChannel chan SocialMessage
 }
 
-func NewSocialClient() *SocialClientImpl {
-	return &SocialClientImpl{}
+func NewSocialClient(twitterConfig clients.TwitterConfig) *SocialClientImpl {
+	client, err := clients.NewTwitterClient(twitterConfig)
+	if err != nil {
+		fmt.Println("generate client err:", err)
+		panic(err)
+	}
+	return &SocialClientImpl{
+		twitterClient: client,
+	}
 }
 
 func (sc *SocialClientImpl) SendMessage(msg SocialMessage) error {
 	switch msg.Platform {
 	case "twitter":
-		return sc.twitterClient.Tweet(msg.Content)
+		return sc.twitterClient.Tweet(context.Background(), msg.Content)
 	// case "discord":
 	// 	return sc.discordBot.SendMessage(msg.Content)
 	case "all":
 		// Send to all platforms
-		if err := sc.twitterClient.Tweet(msg.Content); err != nil {
+		if err := sc.twitterClient.Tweet(context.Background(), msg.Content); err != nil {
 			return err
 		}
 		// return sc.discordBot.SendMessage(msg.Content)
 	}
+
 	return nil
 }
 
 func (sc *SocialClientImpl) GetMessageChannel() chan SocialMessage {
 	return sc.socialMsgChannel
+}
+
+func (sc *SocialClientImpl) MonitorMessages() error {
+	if sc.twitterClient != nil {
+		fmt.Println("try to monitor twitter")
+		tweets, err := sc.twitterClient.MonitorMentioned(context.Background())
+		if err != nil {
+			return err
+		}
+
+		fmt.Println("got tweet!!!", tweets)
+		for _, tweet := range tweets {
+			sc.socialMsgChannel <- SocialMessage{
+				Type:        "mention",
+				Content:     tweet.Text,
+				Platform:    "twitter",
+				FromUser:    tweet.UserID,
+				TargetUsers: []string{sc.twitterClient.GetMe()},
+			}
+		}
+
+	}
+
+	return nil
 }
 
 func parseAnalysis(response string) (*ProcessedMessage, error) {

@@ -36,9 +36,6 @@ func loadConfig() (*Config, error) {
 	// viper.SetConfigType("env")
 	// viper.AddConfigPath("./src")
 
-	// Environment variables take precedence
-	viper.AutomaticEnv()
-
 	// Default values
 	viper.SetDefault("database.type", "sqlite")
 	viper.SetDefault("database.path", "./data/data.db")
@@ -50,6 +47,24 @@ func loadConfig() (*Config, error) {
 			return nil, err
 		}
 	}
+
+	// Load .env file
+	viper.SetConfigName(".env")
+	viper.SetConfigType("env")
+	viper.AddConfigPath("./src")
+	if err := viper.MergeInConfig(); err != nil {
+		return nil, fmt.Errorf("error reading .env: %w", err)
+	}
+
+	viper.Set("llm_config.api_key", viper.Get("LLM_API_KEY"))
+	viper.Set("social.twitter.bearer_token", viper.Get("TWITTER_BEARER_TOKEN"))
+	viper.Set("social.twitter.api_key", viper.Get("TWITTER_API_KEY"))
+	viper.Set("social.twitter.api_key_secret", viper.Get("TWITTER_API_KEY_SECRET"))
+	viper.Set("social.twitter.access_token", viper.Get("TWITTER_ACCESS_TOKEN"))
+	viper.Set("social.twitter.token_secret", viper.Get("TWITTER_TOKEN_SECRET"))
+
+	// Environment variables take precedence
+	viper.AutomaticEnv()
 
 	var conf Config
 	if err := viper.Unmarshal(&conf); err != nil {
@@ -110,6 +125,7 @@ func main() {
 		MemoryManager: memoryManager,
 		Stakeholders:  stakeholderManager,
 		ToolsManager:  toolsManager,
+		SocialClient:  core.NewSocialClient(config.Social.TwitterConfig),
 		TaskManager:   tasks.NewManager(taskStore),
 		ActionManager: actionManager,
 	})

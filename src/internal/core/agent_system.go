@@ -97,11 +97,16 @@ func (a *Agent) getCurrentState() *SystemState {
 
 // Social media monitoring
 func (a *Agent) monitorSocialInputs() {
-	a.processMessage(&SocialMessage{
-		Type:     "post",
-		Content:  "Hey there! Can you tell me what you are able to do to boost the token price?",
-		Platform: "twitter",
-	})
+	// a.processMessage(&SocialMessage{
+	// 	Type:     "post",
+	// 	Content:  "Hey there! Can you tell me what you are able to do to boost the token price?",
+	// 	Platform: "twitter",
+	// })
+
+	ticker := time.NewTicker(5 * time.Minute)
+	defer ticker.Stop()
+
+	go a.socialClient.MonitorMessages()
 	msgQueue := a.socialClient.GetMessageChannel()
 	for {
 		select {
