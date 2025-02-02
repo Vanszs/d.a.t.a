@@ -10,6 +10,7 @@ import (
 	"syscall"
 
 	"github.com/carv-protocol/d.a.t.a/src/characters"
+	"github.com/carv-protocol/d.a.t.a/src/internal/actions"
 	"github.com/carv-protocol/d.a.t.a/src/internal/core"
 	"github.com/carv-protocol/d.a.t.a/src/internal/data"
 	"github.com/carv-protocol/d.a.t.a/src/internal/memory"
@@ -98,6 +99,8 @@ func main() {
 	toolsManager.Register(&customTools.CARVDataTool{})
 	toolsManager.Register(&customTools.WalletTool{})
 
+	actionManager := actions.NewManager()
+
 	// Initialize system
 	agent := core.NewAgent(core.AgentConfig{
 		ID:            uuid.New(),
@@ -108,6 +111,7 @@ func main() {
 		Stakeholders:  stakeholderManager,
 		ToolsManager:  toolsManager,
 		TaskManager:   tasks.NewManager(taskStore),
+		ActionManager: actionManager,
 	})
 
 	agent.RegisterPlugin(analysisPlugin)

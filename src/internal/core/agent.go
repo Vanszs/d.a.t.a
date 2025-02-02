@@ -10,6 +10,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/carv-protocol/d.a.t.a/src/characters"
+	"github.com/carv-protocol/d.a.t.a/src/internal/actions"
 	"github.com/carv-protocol/d.a.t.a/src/internal/data"
 	"github.com/carv-protocol/d.a.t.a/src/internal/memory"
 	"github.com/carv-protocol/d.a.t.a/src/internal/plugins"
@@ -26,6 +27,7 @@ type Agent struct {
 	character     *characters.Character
 	taskManager   *tasks.Manager
 	dataManager   data.Manager
+	actionManager actions.Manager
 	plugins       *plugins.PluginRegistry
 	config        AgentConfig
 	logger        *zap.SugaredLogger
@@ -34,7 +36,6 @@ type Agent struct {
 	socialClient  SocialClient
 	Goals         []Goal
 	ctx           context.Context
-	messageQueue  chan SocialMessage
 	cancel        context.CancelFunc
 }
 
@@ -49,11 +50,12 @@ type SystemState struct {
 	StakeholderPreferences map[string]interface{}
 	// ActiveVotes            map[string][]token.Vote
 
-	Character      *characters.Character
-	AvailableTools []tools.Tool
+	Character        *characters.Character
+	AvailableTools   []tools.Tool
+	AvailableActions []actions.Action
 	// Task and action information
 	ActiveTasks    []*tasks.Task
-	PendingActions []*Action
+	PendingActions []*actions.Action
 }
 
 type Goal struct {
@@ -71,6 +73,7 @@ type AgentConfig struct {
 	MemoryManager memory.Manager
 	TaskManager   *tasks.Manager
 	Stakeholders  *token.StakeholderManager
+	ActionManager actions.Manager
 	ToolsManager  *tools.Manager
 	Training      struct {
 		Enabled       bool
@@ -118,8 +121,10 @@ func NewAgent(config AgentConfig) *Agent {
 		toolManager:   config.ToolsManager,
 		stakeholders:  config.Stakeholders,
 		ctx:           ctx,
+		socialClient:  NewSocialClient(),
 		cancel:        cancel,
 		taskManager:   config.TaskManager,
+		actionManager: config.ActionManager,
 	}
 }
 
@@ -133,9 +138,9 @@ func (a *Agent) GenerateTasks(ctx context.Context, state *SystemState) ([]*tasks
 	return tasks.Tasks, nil
 }
 
-func (a *Agent) ExecuteTask(ctx context.Context, task *tasks.Task, prefs map[string]interface{}) (*TaskResult, error) {
+func (a *Agent) ExecuteTask(ctx context.Context, task *tasks.Task, state *SystemState) (*TaskResult, error) {
 	// Generate actions using cognitive engine
-	actionGen, err := a.cognitive.GenerateActions(ctx, task, prefs)
+	actionGen, err := a.cognitive.GenerateActions(ctx, task, state)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate actions: %w", err)
 	}
@@ -174,11 +179,11 @@ func (a *Agent) GetState() *AgentState {
 	}
 }
 
-func (a *Agent) executeAction(ctx context.Context, action Action) error {
+func (a *Agent) executeAction(ctx context.Context, action actions.Action) error {
 	a.logger.Infow("Executing action", "type", action.Type)
 
 	// Execute action
-	if err := action.Execute(ctx); err != nil {
+	if err := action.Execute(); err != nil {
 		return err
 	}
 

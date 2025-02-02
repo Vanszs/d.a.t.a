@@ -4,29 +4,33 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/carv-protocol/d.a.t.a/src/internal/actions"
+	"github.com/carv-protocol/d.a.t.a/src/internal/tasks"
 	"github.com/carv-protocol/d.a.t.a/src/internal/tools"
 )
 
-func generateTasksPromptFunc(systemState *SystemState) promptGeneratorFunc {
-	generalDescription := fmt.Sprintf(`
-You are an agent **%s**. Here are your basic information:
-### **Agent Information**
-- **Description**: %s
-- **Primary Goals**: %s
-- **Stakeholder Preferences**: %s
-
-Here are your available tools:
-### **Available Tools**
-The following tools are available to the AI Agent:
-%s
-Each tool has specific capabilities. When generating tasks, consider how these tools can be leveraged. You shouldn't create tasks that can't be fullfilled by the given tools.`,
+func getGeneralInfo(systemState *SystemState) string {
+	return fmt.Sprintf(`
+	You are an agent **%s**. Here are your basic information:
+	### **Agent Information**
+	- **Description**: %s
+	- **Primary Goals**: %s
+	- **Stakeholder Preferences**: %s
+	
+	Here are your available tools:
+	### **Available Tools**
+	The following tools are available to the AI Agent:
+	%s
+	Each tool has specific capabilities. When generating tasks, consider how these tools can be leveraged. You shouldn't create tasks that can't be fullfilled by the given tools.`,
 		systemState.Character.Name,
 		systemState.Character.System,
 		convertGoalsToString(systemState.AgentStates.Goals),
 		formatMap(systemState.StakeholderPreferences),
 		formatTools(systemState.AvailableTools),
 	)
+}
 
+func generateTasksPromptFunc(systemState *SystemState) promptGeneratorFunc {
 	return func(stepPurpose StepPurpose, steps []*ThoughtStep) string {
 		switch stepPurpose {
 		case PurposeInitial:
@@ -68,7 +72,7 @@ Structure your response as follows:
 - Ensure tasks are **actionable** and **strategically valuable**.
 
 Now, generate the most relevant and impactful tasks for **%s**.`,
-				generalDescription,
+				getGeneralInfo(systemState),
 				systemState.Character.Name,
 			)
 		case PurposeAnalysis:
@@ -101,7 +105,7 @@ For each task, provide the following evaluation:
 Evaluate all tasks thoroughly and determine their **suitability** for further refinement.
 `,
 				formatPreviousSteps(steps),
-				generalDescription,
+				getGeneralInfo(systemState),
 			)
 		case PurposeReconsider:
 			return fmt.Sprintf(`
@@ -132,7 +136,7 @@ Format your response as follows:
 
 Please provide a **comprehensive reconsideration** of the current approach and suggest **new strategies** that might be more aligned with the goal.`,
 				formatPreviousSteps(steps),
-				generalDescription,
+				getGeneralInfo(systemState),
 			)
 		case PurposeRefinement:
 			// Purpose Refinement: Improve and polish the tasks based on analysis and feedback.
@@ -166,7 +170,7 @@ For each task, provide a detailed refinement:
 Refine the tasks, making them **clearer, actionable, and aligned with the overall goals**.
 `,
 				formatPreviousSteps(steps),
-				generalDescription,
+				getGeneralInfo(systemState),
 			)
 		case PurposeConcrete:
 			// Purpose Concrete: Finalize the tasks into fully executable plans with precise actions.
@@ -212,15 +216,230 @@ Please wrap the JSON format of the final task in the tag <json> and </json>.
 Finalize the task into **Task structure**.
 `,
 				formatPreviousSteps(steps),
-				generalDescription,
+				getGeneralInfo(systemState),
 			)
 		}
 		return ""
 	}
 }
 
-func generateActionsPromptFunc() promptGeneratorFunc {
+func generateActionsPromptFunc(systemState *SystemState, task *tasks.Task, actions []actions.Action) promptGeneratorFunc {
 	return func(stepPurpose StepPurpose, steps []*ThoughtStep) string {
+		switch stepPurpose {
+		case PurposeInitial:
+			// Initial Action Generation
+			actionDescriptions := ""
+			for _, action := range actions {
+				actionDescriptions += fmt.Sprintf("\n- **%s**: %s", action.Name(), action.Description())
+			}
+
+			return fmt.Sprintf(`
+		You are an AI action planning assistant for the agent **%s**. Your goal is to generate a set of **high-level actions** to achieve the tasks defined for the agent.
+		
+		### **Agent Information**
+		- **Description**: %s
+		- **Primary Goals**: %s
+		- **Stakeholder Preferences**: %s
+		
+		### **Available Tools**
+		The following tools are available to the AI Agent:
+		%s
+		
+		### **Action Generation Guidelines**
+		1. **Strategic Alignment**: Actions should directly contribute to **achieving the high-level tasks**.
+		2. **Situational Awareness**: Consider the **current system state**, adapting actions to evolving conditions.
+		3. **Stakeholder Relevance**: Ensure actions are **aligned with preferences** and expectations.
+		4. **Feasibility**: Consider the **capabilities of the available tools** in the action design.
+		5. **Variety and Coverage**: Generate a **wide range of alternative actions** for each task.
+		
+		### **Result Format**
+		For each action, structure your response as follows:
+		
+		<think>
+		- **Action Name**: [Concise, action-oriented title]
+		- **Objective**: [What is the purpose of this action?]
+		- **Expected Outcome**: [What result will this action achieve?]
+		- **Tools Required**: [What tools will be needed for this action?]
+		- **Dependencies**: [What data or actions must precede this one?]
+		**</think>**
+		
+		<evidence>
+		[List specific evidence or reasoning supporting the action]
+		</evidence>
+		
+		<alternatives>
+		[List alternative approaches for achieving the same goal]
+		</alternatives>
+		
+		### **Output Requirements**
+		- Provide **at least 5-7** distinct, high-level actions.
+		- Ensure actions are **feasible**, **strategically valuable**, and **scalable**.
+		
+		Now, generate the most relevant and impactful actions for **%s**.`,
+				systemState.Character.Name,
+				systemState.Character.System,
+				convertGoalsToString(systemState.AgentStates.Goals),
+				formatMap(systemState.StakeholderPreferences),
+				actionDescriptions,
+				systemState.Character.Name,
+			)
+
+		case PurposeExploration:
+			// Exploration: Generate many potential action ideas, even unconventional ones
+			return fmt.Sprintf(`
+		Let's explore different possible **actions** for the task:
+		
+		### **Previous Steps:**
+		%s
+		
+		Think creatively and list as many possible **high-level actions** as possible, even if they seem unconventional. Consider:
+		1. **Actions that align with the core task objectives**.
+		2. **Actions that make use of the available tools**.
+		3. **Actions that could address stakeholder needs**.
+		4. **Unconventional approaches** that might be effective.
+		
+		### **Action Format**
+		For each action, structure your response as follows:
+		
+		<think>
+		- **Action Name**: [Concise, action-oriented title]
+		- **Objective**: [What is the purpose of this action?]
+		- **Expected Outcome**: [How will this contribute to the task goal?]
+		- **Tools Involved**: [Which tools will be used to execute this action?]
+		</think>
+		
+		<evidence>
+		[List specific evidence or reasoning supporting the action]
+		</evidence>
+		
+		<alternatives>
+		[List other possible approaches]
+		</alternatives>
+		
+		Provide **at least 7-10** action ideas that could be explored further.
+		`,
+				formatPreviousSteps(steps),
+			)
+
+		case PurposeAnalysis:
+			// Analysis: Evaluate the feasibility and impact of the actions generated
+			return fmt.Sprintf(`
+		We have identified the following potential actions:
+		
+		%s
+		
+		Let's analyze each action for **feasibility**, **alignment with goals**, and **impact**. Consider the following:
+		1. **Strategic Alignment**: Does this action contribute to the task's overall goal?
+		2. **Feasibility**: Is this action achievable given the available tools and resources?
+		3. **Risk and Challenges**: What are the potential risks associated with this action?
+		4. **Stakeholder Impact**: How does this action align with stakeholder preferences and priorities?
+		
+		### **Action Evaluation Format**
+		For each action, provide the following analysis:
+		
+		**<think>**
+		- **Action Name**: [Action being analyzed]
+		- **Strategic Alignment**: [Does this align with the task’s core objectives?]
+		- **Feasibility**: [Is this achievable with current tools and resources?]
+		- **Risk and Challenges**: [What risks should be mitigated?]
+		- **Stakeholder Impact**: [How will stakeholders be affected?]
+		**</think>
+		
+		Evaluate each action based on its **alignment**, **feasibility**, and **impact**.
+		`,
+				formatPreviousSteps(steps),
+			)
+
+		case PurposeReconsider:
+			// Reconsider: Reflect on the actions and suggest improvements
+			return fmt.Sprintf(`
+		Let's **reconsider** the actions we have generated.
+		
+		### **Previous Actions:**
+		%s
+		
+		Evaluate each action to determine if:
+		1. **Alternative approaches** could be more efficient.
+		2. **Improvement opportunities** exist (e.g., breaking down complex actions into smaller steps).
+		3. The actions should be **reprioritized** based on updated insights.
+		
+		### **Reconsideration Questions:**
+		1. **What assumptions are we making** about the task or resources?
+		2. **Are there better alternatives** that would achieve the same goal with fewer resources?
+		3. **How can we improve** the efficiency of these actions?
+		
+		### **Reconsidered Action Format**
+		For each reconsidered action, structure your response as follows:
+		
+		**<think>**
+		- **Action Name**: [Action being reconsidered]
+		- **Improvement Opportunity**: [What can be improved?]
+		- **Alternative Approach**: [Describe a better alternative]
+		- **Stakeholder Alignment**: [How does this alternative align with stakeholder needs?]
+		</think>
+		
+		<evidence>
+		[List any supporting evidence for the reconsidered action]
+		</evidence>
+		
+		<alternatives>
+		[List alternative approaches]
+		</alternatives>
+		
+		Reconsider each action and suggest **improvements** or **new alternatives**.
+		`,
+				formatPreviousSteps(steps),
+			)
+
+		case PurposeRefinement:
+			// Refinement: Polish the actions, making them clear and actionable
+			return fmt.Sprintf(`
+		Let's refine the actions for **clarity and effectiveness**.
+		
+		### **Actions to Refine:**
+		%s
+		
+		Ensure each action is:
+		1. **Clear** and **actionable** with specific steps.
+		2. **Efficient**, minimizing unnecessary complexity.
+		3. **Aligned with the core goals** and **stakeholder preferences**.
+		
+		### **Refined Action Format**
+		For each action, structure your response as follows:
+		
+		**<think>**
+		- **Action Name**: [Refined action name]
+		- **Execution Plan**: [Detailed steps for execution]
+		- **Resources Required**: [What tools, data, or support is needed?]
+		- **Timeline**: [Define deadlines or milestones]
+		</think>
+		
+		Refine the actions, ensuring they are **clear**, **efficient**, and **actionable**.
+		`,
+				formatPreviousSteps(steps),
+			)
+
+		case PurposeConcrete:
+			// Concrete: Finalize the actions into **clear, executable plans**
+			return fmt.Sprintf(`
+		We are now finalizing the actions for **execution**.
+		
+		### **Final Action Format**
+		For each action, generate a **finalized execution plan** with clear, actionable steps:
+		
+		**<think>**
+		- **Action Name**: [Finalized action name]
+		- **Execution Steps**: [Step-by-step breakdown of the action]
+		- **Assigned To**: [Which agent or tool is responsible?]
+		- **Resources Needed**: [Any required tools or data]
+		- **Deadline**: [Timeline for completion]
+		</think>
+		
+		Finalize each action, ensuring it is **ready for execution** with a detailed **step-by-step plan**.
+		`,
+				formatPreviousSteps(steps),
+			)
+		}
 		return ""
 	}
 }
@@ -249,6 +468,26 @@ func formatTools(tools []tools.Tool) string {
 	return result
 }
 
-func buildMessagePrompt(msgContext map[string]interface{}) string {
-	return ""
+func buildMessagePrompt(state *SystemState, msg *SocialMessage) string {
+	// Create a prompt that explains all the possible types and asks for structured analysis
+	return fmt.Sprintf(`
+%s
+You received this user message from %s. You should analysis the message and return a JSON object with specific fields.
+Available Intent Types: question, feedback, complaint, suggestion, greeting, inquiry, request, acknowledge
+Available Entity Types: person, product, company, location, datetime, crypto, wallet, contract
+Available Emotion Types: positive, negative, neutral
+
+For the message: "%s"
+
+Return a JSON object with these fields:
+{
+	"intent": "one of the intent types",
+	"entity": "one of the entity types",
+	"emotion": "one of the emotion types",
+	"confidence": confidence score between 0 and 1,
+	"should_reply": boolean indicating if a reply is needed,
+	"response_msg": "appropriate response message if should_reply is true",
+	"should_generate_task": boolean indicating if this requires task creation,
+	"should_generate_action": boolean indicating if this requires action generation
+}`, getGeneralInfo(state), msg.Platform, msg.Content)
 }

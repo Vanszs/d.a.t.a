@@ -6,13 +6,14 @@ import (
 	"strings"
 	"time"
 
+	"github.com/carv-protocol/d.a.t.a/src/internal/actions"
 	"github.com/carv-protocol/d.a.t.a/src/internal/tasks"
 )
 
 type TaskResult struct {
 	TaskID    string
 	Task      *tasks.Task
-	Actions   []Action
+	Actions   []actions.Action
 	Result    []error
 	Timestamp time.Time
 }
@@ -50,6 +51,5 @@ func convertThoughtChainToTasks(chain *ThoughtChain) (*tasks.Task, error) {
 		return nil, fmt.Errorf("failed to unmarshal JSON: %w", err)
 	}
 
-	fmt.Printf("Task: %+v\n", task)
 	return &task, nil
 }

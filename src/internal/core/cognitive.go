@@ -184,17 +184,22 @@ func formatPreviousSteps(steps []*ThoughtStep) string {
 func (e *CognitiveEngine) GenerateActions(
 	ctx context.Context,
 	task *tasks.Task,
-	prefs map[string]interface{},
+	state *SystemState,
 ) (*ActionGeneration, error) {
 	// Build action context
 	actionContext := map[string]interface{}{
 		"task":        task,
-		"preferences": prefs,
+		"preferences": state.StakeholderPreferences,
 		"goal":        "generate detailed action plan",
 	}
 
 	// Generate thought chain for action planning
-	chain, err := e.GenerateThoughtChain(ctx, actionContext, prefs, generateActionsPromptFunc())
+	chain, err := e.GenerateThoughtChain(
+		ctx,
+		actionContext,
+		state.StakeholderPreferences,
+		generateActionsPromptFunc(state, task, state.AvailableActions),
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -209,29 +214,22 @@ func (e *CognitiveEngine) GenerateActions(
 }
 
 // GenerateActions uses chain-of-thought for action planning
-func (e *CognitiveEngine) GenerateMessage(ctx context.Context, input interface{}, prefs map[string]interface{}) (string, error) {
-	// Build action context
-	msgContext := map[string]interface{}{
-		"character":   e.character,
-		"preferences": prefs,
-		"goal":        "generate detailed action plan",
-	}
+// func (e *CognitiveEngine) GenerateMessage(ctx context.Context, state *SystemState, msg SocialMessage) (string, error) {
+// 	// Generate initial thought
+// 	prompt := buildMessagePrompt(state, msg)
+// 	response, err := e.llm.CreateCompletion(ctx, llm.CompletionRequest{
+// 		Model: "deepseek",
+// 		Messages: []llm.Message{
+// 			{Role: "system", Content: e.character.System},
+// 			{Role: "user", Content: prompt},
+// 		},
+// 	})
+// 	if err != nil {
+// 		return "", err
+// 	}
 
-	// Generate initial thought
-	prompt := buildMessagePrompt(msgContext)
-	response, err := e.llm.CreateCompletion(ctx, llm.CompletionRequest{
-		Model: "deepseek",
-		Messages: []llm.Message{
-			{Role: "system", Content: e.character.System},
-			{Role: "user", Content: prompt},
-		},
-	})
-	if err != nil {
-		return "", err
-	}
-
-	return response, nil
-}
+// 	return response, nil
+// }
 
 // GenerateTasks uses chain-of-thought for tasks planning
 func (e *CognitiveEngine) GenerateTasks(
@@ -416,6 +414,35 @@ func containsAspect(step string, aspect string) bool {
 		}
 	}
 	return false
+}
+
+func (e *CognitiveEngine) processMessage(
+	ctx context.Context,
+	state *SystemState,
+	msg *SocialMessage,
+) (*ProcessedMessage, error) {
+	prompt := buildMessagePrompt(state, msg)
+	// Get LLM's analysis
+	response, err := e.llm.CreateCompletion(ctx, llm.CompletionRequest{
+		Model: "deepseek",
+		Messages: []llm.Message{
+			{
+				Role:    "system",
+				Content: "You are a message analyzer. For each message, identify the user's intent, required action, appropriate response, and sentiment (from -1 to 1). Return JSON format.",
+			},
+			{
+				Role:    "user",
+				Content: prompt,
+			},
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	e.logger.Info("LLM response: ", response)
+	// Parse LLM response into ProcessedMessage
+	return parseAnalysis(response)
 }
 
 // Helper functions
