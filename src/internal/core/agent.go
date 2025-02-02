@@ -15,6 +15,7 @@ import (
 	"github.com/carv-protocol/d.a.t.a/src/internal/plugins"
 	"github.com/carv-protocol/d.a.t.a/src/internal/tasks"
 	"github.com/carv-protocol/d.a.t.a/src/internal/token"
+	"github.com/carv-protocol/d.a.t.a/src/internal/tools"
 	"github.com/carv-protocol/d.a.t.a/src/pkg/llm"
 )
 
@@ -28,6 +29,7 @@ type Agent struct {
 	plugins       *plugins.PluginRegistry
 	config        AgentConfig
 	logger        *zap.SugaredLogger
+	toolManager   *tools.Manager
 	stakeholders  *token.StakeholderManager
 	socialClient  SocialClient
 	Goals         []Goal
@@ -47,6 +49,8 @@ type SystemState struct {
 	StakeholderPreferences map[string]interface{}
 	// ActiveVotes            map[string][]token.Vote
 
+	Character      *characters.Character
+	AvailableTools []tools.Tool
 	// Task and action information
 	ActiveTasks    []*tasks.Task
 	PendingActions []*Action
@@ -67,6 +71,7 @@ type AgentConfig struct {
 	MemoryManager memory.Manager
 	TaskManager   *tasks.Manager
 	Stakeholders  *token.StakeholderManager
+	ToolsManager  *tools.Manager
 	Training      struct {
 		Enabled       bool
 		MaxIterations int
@@ -110,6 +115,7 @@ func NewAgent(config AgentConfig) *Agent {
 		dataManager:   config.DataManager,
 		config:        config,
 		logger:        logger.Sugar(),
+		toolManager:   config.ToolsManager,
 		stakeholders:  config.Stakeholders,
 		ctx:           ctx,
 		cancel:        cancel,
@@ -121,6 +127,7 @@ func (a *Agent) GenerateTasks(ctx context.Context, state *SystemState) ([]*tasks
 	tasks, err := a.cognitive.GenerateTasks(ctx, state)
 	if err != nil {
 		a.logger.Errorw("Failed to evaluate task", "error", err)
+		return nil, err
 	}
 
 	return tasks.Tasks, nil

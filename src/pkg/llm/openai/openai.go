@@ -55,7 +55,6 @@ func NewClient(apiKey string) *Client {
 
 func (c *Client) CreateCompletion(ctx context.Context, req CompletionRequest) (string, error) {
 	// TODO: Add more open ai api's ability to create completions
-	fmt.Println(req.Messages)
 	chatCompletion, err := c.client.Chat.Completions.New(
 		context.Background(),
 		openai.ChatCompletionNewParams{
@@ -68,7 +67,6 @@ func (c *Client) CreateCompletion(ctx context.Context, req CompletionRequest) (s
 		return "", fmt.Errorf("creating completion: %w", err)
 	}
 
-	fmt.Println(chatCompletion)
 	return chatCompletion.Choices[0].Message.Content, nil
 }
 

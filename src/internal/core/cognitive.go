@@ -45,8 +45,7 @@ type CognitiveConfig struct {
 
 // ThoughtChain represents a sequence of reasoning steps
 type ThoughtChain struct {
-	InitialThought string
-	Steps          []*ThoughtStep
+	Steps []*ThoughtStep
 	// Confidence      float64
 	Reflection      string
 	FinalConclusion string
@@ -71,7 +70,7 @@ type ThoughtStep struct {
 func NewCognitiveEngine(llmClient llm.Client, character *characters.Character, logger *zap.SugaredLogger) *CognitiveEngine {
 	return &CognitiveEngine{
 		llm:           llmClient,
-		maxSteps:      10,
+		maxSteps:      3,
 		minConfidence: 0.7,
 		character:     character,
 		logger:        logger,
@@ -87,9 +86,8 @@ func (e *CognitiveEngine) GenerateThoughtChain(
 ) (*ThoughtChain, error) {
 	e.logger.Info("Generating thought chain")
 	chain := &ThoughtChain{
-		InitialThought: "",
-		Steps:          make([]*ThoughtStep, 0),
-		Timestamp:      time.Now(),
+		Steps:     make([]*ThoughtStep, 0),
+		Timestamp: time.Now(),
 	}
 
 	// Generate reasoning steps
@@ -103,7 +101,9 @@ func (e *CognitiveEngine) GenerateThoughtChain(
 		}
 
 		// 3. Check for "aha moment" - potential reconsideration
-		if AhaMomentDetection := e.detectAhaMoment(ctx, step, chain.Steps, step.Alternatives, prefs); AhaMomentDetection.Triggered {
+		if AhaMomentDetection := e.detectAhaMoment(
+			ctx, step, chain.Steps, step.Alternatives, prefs,
+		); purpose != PurposeConcrete && AhaMomentDetection.Triggered {
 			// Generate reconsideration step
 			step, err = e.generateThoughtStep(ctx, chain, PurposeReconsider, promptGenerator)
 			if err != nil {
@@ -111,6 +111,7 @@ func (e *CognitiveEngine) GenerateThoughtChain(
 			}
 		}
 
+		e.logger.Infof("Generated step: %d, %s", i, step.Content)
 		chain.Steps = append(chain.Steps, step)
 
 		// Check if we need more steps
@@ -127,9 +128,12 @@ func (e *CognitiveEngine) determineStepPurpose(stepIndex int) StepPurpose {
 	if stepIndex == 0 {
 		return PurposeInitial
 	}
+	if stepIndex == e.maxSteps-1 {
+		return PurposeConcrete
+	}
 
 	totalSteps := float64(e.maxSteps)
-	progress := float64(stepIndex) / totalSteps
+	progress := float64(stepIndex+1) / totalSteps
 
 	switch {
 	case progress < 0.3:
@@ -245,16 +249,19 @@ func (e *CognitiveEngine) GenerateTasks(
 		ctx,
 		taskContext,
 		state.StakeholderPreferences,
-		generateTasksPromptFunc(*e.character, state))
+		generateTasksPromptFunc(state))
 	if err != nil {
 		return nil, err
 	}
 
 	// Convert thought chain to actions
-	tasks, _ := convertThoughtChainToTasks(chain)
+	task, err := convertThoughtChainToTasks(chain)
+	if err != nil {
+		return nil, err
+	}
 
 	return &TaskGeneration{
-		Tasks: tasks,
+		Tasks: []*tasks.Task{task},
 		Chain: chain,
 	}, nil
 }
@@ -288,26 +295,6 @@ func (e *CognitiveEngine) generateThoughtStep(
 	}, nil
 }
 
-func (e *CognitiveEngine) extractThoughtAndEvidence(llmResponse string) (string, []string) {
-	// Extract thought content
-	thought := extractThinkingContent(llmResponse)
-
-	// Extract evidence
-	// evidenceStr := extractEvidence(llmResponse)
-
-	// // Parse evidence into structured format
-	// TODO: Implement evidence parsing
-	// for _, evidenceItem := range parseEvidenceItems(evidenceStr) {
-	// 	evidence = append(evidence, Evidence{
-	// 		// Type:        identifyEvidenceType(evidenceItem),
-	// 		Description: evidenceItem,
-	// 		// Weight:      calculateEvidenceWeight(evidenceItem),
-	// 	})
-	// }
-
-	return thought, []string{}
-}
-
 // isConclusive determines if the reasoning chain has reached a satisfactory conclusion
 func (e *CognitiveEngine) isConclusive(chain *ThoughtChain) bool {
 	// Check minimum confidence threshold
@@ -328,13 +315,8 @@ func (e *CognitiveEngine) isConclusive(chain *ThoughtChain) bool {
 
 	// Verify last step completion
 	lastStep := chain.Steps[len(chain.Steps)-1]
-	if lastStep.Purpose != PurposeConcrete {
-		return false
-	}
 
-	// Calculate overall reasoning completeness
-	// completeness := e.calculateCompleteness(chain)
-	return true
+	return lastStep.Purpose == PurposeConcrete
 }
 
 // Helper functions

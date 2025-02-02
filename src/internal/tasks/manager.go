@@ -16,17 +16,15 @@ const (
 
 type Task struct {
 	ID                       string
-	Title                    string
+	Name                     string
 	Description              string
 	Priority                 float64
-	AgentID                  string
+	ExecutionSteps           []string
 	Status                   TaskStatus
-	Metrics                  map[string]Metric
 	Deadline                 *time.Time
 	RequiresApproval         bool
 	RequiresStakeholderInput bool
-	AutoRenew                bool
-	AutoTrigger              string
+	Tools                    []string
 	CreatedBy                string
 	CreatedAt                time.Time
 	UpdatedAt                time.Time

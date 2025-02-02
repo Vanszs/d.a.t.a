@@ -15,8 +15,10 @@ import (
 	"github.com/carv-protocol/d.a.t.a/src/internal/memory"
 	"github.com/carv-protocol/d.a.t.a/src/internal/tasks"
 	"github.com/carv-protocol/d.a.t.a/src/internal/token"
+	"github.com/carv-protocol/d.a.t.a/src/internal/tools"
 	"github.com/carv-protocol/d.a.t.a/src/pkg/database/adapters"
 	"github.com/carv-protocol/d.a.t.a/src/pkg/llm"
+	customTools "github.com/carv-protocol/d.a.t.a/src/tools"
 
 	"github.com/google/uuid"
 	"github.com/spf13/viper"
@@ -91,6 +93,10 @@ func main() {
 	}
 
 	taskStore := tasks.NewTaskStore(store)
+	toolsManager := tools.NewManager()
+	toolsManager.Register(&customTools.TwitterTool{})
+	toolsManager.Register(&customTools.CARVDataTool{})
+	toolsManager.Register(&customTools.WalletTool{})
 
 	// Initialize system
 	agent := core.NewAgent(core.AgentConfig{
@@ -100,6 +106,7 @@ func main() {
 		DataManager:   dataManager,
 		MemoryManager: memoryManager,
 		Stakeholders:  stakeholderManager,
+		ToolsManager:  toolsManager,
 		TaskManager:   tasks.NewManager(taskStore),
 	})
 

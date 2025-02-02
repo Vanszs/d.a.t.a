@@ -41,11 +41,12 @@ func (a *Agent) runPeriodicEvaluation() {
 	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
 
-	a.logger.Infof("First evaluation in %d seconds", 5)
+	a.evaluateAndExecuteTasks()
+	// a.logger.Infof("First evaluation in %d seconds", 5)
 	for {
 		select {
 		case <-ticker.C:
-			a.evaluateAndExecuteTasks()
+			// a.evaluateAndExecuteTasks()
 		case <-a.ctx.Done():
 			return
 		}
@@ -90,6 +91,8 @@ func (a *Agent) getCurrentState() *SystemState {
 	pref, _ := a.stakeholders.GetAggregatedPreferences(a.ctx)
 
 	return &SystemState{
+		Character:              a.character,
+		AvailableTools:         a.toolManager.AvailableTools(),
 		Timestamp:              time.Now(),
 		AgentStates:            a.GetState(),
 		StakeholderPreferences: pref,
