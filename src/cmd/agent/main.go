@@ -62,6 +62,7 @@ func loadConfig() (*Config, error) {
 	viper.Set("social.twitter.api_key_secret", viper.Get("TWITTER_API_KEY_SECRET"))
 	viper.Set("social.twitter.access_token", viper.Get("TWITTER_ACCESS_TOKEN"))
 	viper.Set("social.twitter.token_secret", viper.Get("TWITTER_TOKEN_SECRET"))
+	viper.Set("social.discord.api_token", viper.Get("DISCORD_API_TOKEN"))
 
 	// Environment variables take precedence
 	viper.AutomaticEnv()
@@ -96,7 +97,7 @@ func main() {
 	memoryManager := memory.NewManager(store)
 	tokenManager := token.NewTokenManager(dataManager)
 
-	stakeholderManager := token.NewStakeholderManager(memoryManager, tokenManager)
+	stakeholderManager := token.NewStakeholderManager(memoryManager, tokenManager, dataManager)
 
 	// Load character
 	character, err := characters.LoadFromFile(config.Character.Path)
@@ -125,7 +126,7 @@ func main() {
 		MemoryManager: memoryManager,
 		Stakeholders:  stakeholderManager,
 		ToolsManager:  toolsManager,
-		SocialClient:  core.NewSocialClient(config.Social.TwitterConfig),
+		SocialClient:  core.NewSocialClient(nil, &config.Social.DiscordConfig),
 		TaskManager:   tasks.NewManager(taskStore),
 		ActionManager: actionManager,
 	})

@@ -2,124 +2,100 @@ package token
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"math"
 	"math/big"
 	"time"
 
+	"github.com/carv-protocol/d.a.t.a/src/internal/data"
 	"github.com/carv-protocol/d.a.t.a/src/internal/memory"
-	"github.com/google/uuid"
 )
 
 // StakeholderManager manages stakeholder interactions and influences
 type StakeholderManager struct {
 	tokenManager  *TokenManager
 	memoryManager memory.Manager
-	messageParser *MessageParser
 	store         *StakeholderStore
+	dataManager   data.Manager
 }
 
-// StakeholderInput represents processed input from social media
-type StakeholderInput struct {
-	StakeholderID string
-	InputIntent   InputIntent
-	Platform      string // "twitter", "discord"
-	MessageID     string
-	Content       string
-	Timestamp     time.Time
-	TokenBalance  *big.Int
-	Preferences   map[string]interface{}
+type Stakeholder struct {
+	ID             string
+	CarvID         string
+	Token          *big.Int
+	HistoricalMsgs []string
 }
 
-// InputIntent classifies the type of stakeholder input
-type InputIntent struct {
-	Type         string  // "feedback", "preference", "governance"
-	TargetAgent  string  // Which agent this affects
-	TargetAspect string  // What aspect to modify
-	Sentiment    float64 // -1 to 1 sentiment score
-	Confidence   float64 // How confident we are in the interpretation
-}
-
-// Message types for different interactions
-type MessageType string
-
-const (
-	TypeFeedbackRequest MessageType = "FEEDBACK_REQUEST"
-	TypeStatusUpdate    MessageType = "STATUS_UPDATE"
-	TypeAlert           MessageType = "ALERT"
-)
-
-type SocialMessage struct {
-	UserID      string
-	Type        MessageType
-	Content     string
-	Platform    string
-	TargetAgent string
-	Timestamp   time.Time
-	Context     map[string]interface{}
-}
-
-// Preference represents a stakeholder's preference for an aspect
-type Preference struct {
-	Value     interface{}
-	Weight    float64 // Based on token holdings
-	UpdatedAt time.Time
-	Source    string // Which platform/message set this
-}
-
-func NewStakeholderManager(memoryManager memory.Manager, tokenManager *TokenManager) *StakeholderManager {
+func NewStakeholderManager(memoryManager memory.Manager, tokenManager *TokenManager, dataManager data.Manager) *StakeholderManager {
 	return &StakeholderManager{
 		tokenManager:  tokenManager,
-		messageParser: NewMessageParser(),
 		memoryManager: memoryManager,
 	}
 }
 
 // ProcessMessage handles new input from social media
-func (sm *StakeholderManager) ProcessMessage(ctx context.Context, msg *SocialMessage) (*StakeholderInput, error) {
-	// 1. Parse message to understand intent
-	input, err := sm.messageParser.Parse(msg)
+func (sm *StakeholderManager) FetchOrCreateStakeholder(ctx context.Context, id string) (*Stakeholder, error) {
+	var stakeholder *Stakeholder
+	mem, err := sm.memoryManager.GetMemory(ctx, id)
 	if err != nil {
 		return nil, err
 	}
+	// stakeholder doesn't exist
+	if mem == nil {
+		stakeholder = &Stakeholder{
+			ID:             id,
+			CarvID:         "",
+			Token:          big.NewInt(0),
+			HistoricalMsgs: []string{},
+		}
 
-	// 2. Validate stakeholder token holdings
-	holdings, err := sm.tokenManager.GetHoldings(input.StakeholderID)
-	if err != nil {
-		return nil, err
+		res, err := json.Marshal(stakeholder)
+		if err != nil {
+			return nil, err
+		}
+		sm.memoryManager.CreateMemory(ctx, memory.Memory{
+			MemoryID:  id,
+			CreatedAt: time.Now(),
+			Content:   res,
+		})
+	} else {
+		err = json.Unmarshal(mem.Content, &stakeholder)
+		if err != nil {
+			return nil, err
+		}
 	}
-	input.TokenBalance = holdings
 
-	// 3. Update stakeholder state
-	if err := sm.updateStakeholderState(ctx, input); err != nil {
-		return nil, err
-	}
-
-	return input, nil
+	return stakeholder, nil
 }
 
-// updateStakeholderState persists changes from new input
-func (sm *StakeholderManager) updateStakeholderState(ctx context.Context, input *StakeholderInput) error {
-	// Get current state
-	state, err := sm.store.GetStakeholderState(ctx, input.StakeholderID)
+// AddHistoricalMsg adds a new historical message to a stakeholder's record
+func (sm *StakeholderManager) AddHistoricalMsg(ctx context.Context, id string, msgs []string) error {
+	var stakeholder *Stakeholder
+	mem, err := sm.memoryManager.GetMemory(ctx, id)
 	if err != nil {
-		state = &StakeholderState{
-			ID:          input.StakeholderID,
-			LastUpdated: time.Now(),
-		}
+		return err
+	}
+	if mem == nil {
+		return fmt.Errorf("stakeholder doesn't exist")
 	}
 
-	// Update preferences based on input
-	for k, v := range input.Preferences {
-		state.Preferences[k] = Preference{
-			Value:     v,
-			Weight:    calculateWeight(input.TokenBalance),
-			UpdatedAt: input.Timestamp,
-			Source:    input.Platform,
-		}
+	err = json.Unmarshal(mem.Content, &stakeholder)
+	if err != nil {
+		return err
+	}
+	stakeholder.HistoricalMsgs = append(stakeholder.HistoricalMsgs, msgs...)
+
+	res, err := json.Marshal(stakeholder)
+	if err != nil {
+		return err
 	}
 
-	// Persist to database
-	return sm.store.SaveStakeholderState(ctx, state)
+	return sm.memoryManager.SetMemory(ctx, &memory.Memory{
+		MemoryID:  mem.MemoryID,
+		CreatedAt: mem.CreatedAt,
+		Content:   res,
+	})
 }
 
 // GetAggregatedPreferences gets current preferences weighted by stake
@@ -135,7 +111,7 @@ func (sm *StakeholderManager) GetAggregatedPreferences(ctx context.Context) (map
 	for _, state := range states {
 		weight := calculateWeight(state.TokenBalance)
 		for k, pref := range state.Preferences {
-			aggregated[k] = aggregatePreference(aggregated[k], pref.Value, weight)
+			aggregated[k] = aggregatePreference(aggregated[k], pref, weight)
 		}
 	}
 
@@ -245,82 +221,4 @@ func calculateWeight(balance *big.Int) float64 {
 		return 1.0
 	}
 	return normalizedWeight
-}
-
-// Example message parser for social media inputs
-type MessageParser struct {
-	// nlp           *NLPProcessor
-	// intentModel   *IntentClassifier
-	prefExtractor *PreferenceExtractor
-}
-
-func NewMessageParser() *MessageParser {
-	return &MessageParser{
-		prefExtractor: &PreferenceExtractor{},
-	}
-}
-
-func (mp *MessageParser) Parse(msg *SocialMessage) (*StakeholderInput, error) {
-	prefs, err := mp.prefExtractor.Extract(msg.Content)
-	if err != nil {
-		return nil, err
-	}
-
-	return &StakeholderInput{
-		StakeholderID: msg.UserID,
-		Platform:      msg.Platform,
-		MessageID:     uuid.New().String(),
-		Content:       msg.Content,
-		Timestamp:     msg.Timestamp,
-		Preferences:   prefs,
-	}, nil
-}
-
-// Example usage with social media integration
-// func ExampleStakeholderSystem() {
-// 	// Initialize system
-// 	sm := NewStakeholderManager(db, tokenManager)
-
-// 	// Process Twitter message
-// 	twitterMsg := SocialMessage{
-// 		Platform:  "twitter",
-// 		Content:   "The trading agent should be more conservative with stop losses set at 2%",
-// 		Timestamp: time.Now(),
-// 	}
-
-// 	sm.ProcessMessage(context.Background(), twitterMsg)
-
-// 	// Process Discord message
-// 	discordMsg := Message{
-// 		Platform:  "discord",
-// 		AuthorID:  "user123",
-// 		Content:   "!setpref risk_tolerance 0.3",
-// 		Timestamp: time.Now(),
-// 	}
-
-// 	sm.ProcessMessage(context.Background(), discordMsg)
-
-// 	// Get current preferences for agent execution
-// 	prefs, _ := sm.GetAggregatedPreferences(context.Background())
-
-// 	// Execute task with stakeholder preferences
-// 	agent.ExecuteTask(Task{
-// 		Type: "trading",
-// 		Params: map[string]interface{}{
-// 			"asset": "BTC",
-// 			"size":  1000,
-// 		},
-// 	}, prefs)
-// }
-
-// Preference extractor for different message formats
-type PreferenceExtractor struct {
-	patterns map[string][]string
-}
-
-func (pe *PreferenceExtractor) Extract(content string) (map[string]interface{}, error) {
-	prefs := make(map[string]interface{})
-	// Implement me
-
-	return prefs, nil
 }

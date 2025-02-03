@@ -212,6 +212,35 @@ func (s *SQLiteStore) Delete(ctx context.Context, tableName string, id string) e
 	return nil
 }
 
+// Get retrieves data from the specified table
+func (s *SQLiteStore) Get(ctx context.Context, tableName string, id string) (map[string]interface{}, error) {
+	if s.db == nil {
+		return nil, fmt.Errorf("database connection not established")
+	}
+
+	// Clean table name and validate id
+	tableName = sanitizeIdentifier(tableName)
+	if tableName == "" {
+		return nil, fmt.Errorf("invalid table name")
+	}
+	if id == "" {
+		return nil, fmt.Errorf("invalid id")
+	}
+
+	// Build and execute query
+	query := fmt.Sprintf("SELECT * FROM %s WHERE id = ?", tableName)
+
+	row := s.db.QueryRowContext(ctx, query, id)
+
+	// Scan the result
+	data := make(map[string]interface{})
+	if err := row.Scan(data); err != nil {
+		return nil, fmt.Errorf("failed to get data from %s: %w", tableName, err)
+	}
+
+	return data, nil
+}
+
 // Close closes the database connection
 func (s *SQLiteStore) Close() error {
 	if s.db != nil {

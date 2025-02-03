@@ -36,7 +36,7 @@ type Tweet struct {
 	UserID string
 }
 
-func NewTwitterClient(twitterConfig TwitterConfig) (*TwitterClient, error) {
+func NewTwitterClient(twitterConfig *TwitterConfig) (*TwitterClient, error) {
 	in := &gotwi.NewClientInput{
 		AuthenticationMethod: gotwi.AuthenMethodOAuth1UserContext,
 		OAuthToken:           twitterConfig.AccessToken,

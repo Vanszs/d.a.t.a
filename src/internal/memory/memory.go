@@ -11,14 +11,15 @@ type UserInput struct {
 }
 
 type Memory struct {
-	memoryID  string
-	createdAt time.Time
-	content   string
+	MemoryID  string
+	CreatedAt time.Time
+	Content   []byte
 }
 
 type Manager interface {
 	CreateMemory(ctx context.Context, memory Memory) error
 	GetMemory(ctx context.Context, id string) (*Memory, error)
+	SetMemory(ctx context.Context, mem *Memory) error
 	ListMemories(ctx context.Context, filter MemoryFilter) ([]*Memory, error)
 	DeleteMemory(ctx context.Context, id string) error
 	SearchByEmbedding(ctx context.Context, embedding []float64, opts SearchOptions) ([]*Memory, error)
@@ -40,6 +41,10 @@ func (m *managerImpl) CreateMemory(ctx context.Context, memory Memory) error {
 
 func (m *managerImpl) GetMemory(ctx context.Context, id string) (*Memory, error) {
 	return nil, nil
+}
+
+func (m *managerImpl) SetMemory(ctx context.Context, mem *Memory) error {
+	return nil
 }
 
 // GetState is a generic function to retrieve any type of state

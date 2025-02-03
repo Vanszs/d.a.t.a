@@ -106,7 +106,8 @@ func (a *Agent) monitorSocialInputs() {
 	ticker := time.NewTicker(5 * time.Minute)
 	defer ticker.Stop()
 
-	go a.socialClient.MonitorMessages()
+	// TODO: fix this
+	go a.socialClient.MonitorMessages(a.ctx)
 	msgQueue := a.socialClient.GetMessageChannel()
 	for {
 		select {
@@ -128,6 +129,9 @@ func (a *Agent) processMessage(msg *SocialMessage) error {
 		return err
 	}
 
+	// TODO fetch or create stakeholder
+	// a.stakeholders.FetchOrCreateStakeholder(a.ctx, msg.FromUser)
+
 	a.logger.Infof("Processed message: %+v", processedMsg)
 	// TODO: process task generation and action taking
 	if processedMsg.ShouldReply {
@@ -136,6 +140,7 @@ func (a *Agent) processMessage(msg *SocialMessage) error {
 			Platform: msg.Platform,
 			Type:     "Response",
 			Content:  processedMsg.ResponseMsg,
+			Metadata: msg.Metadata,
 		})
 	}
 

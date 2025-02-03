@@ -37,7 +37,7 @@ type StakeholderState struct {
 	ID           string
 	TokenBalance *big.Int
 	Reputation   float64
-	Preferences  map[string]Preference
+	Preferences  map[string]interface{}
 	LastUpdated  time.Time
 }
 
