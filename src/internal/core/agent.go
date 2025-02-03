@@ -6,9 +6,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/google/uuid"
-	"go.uber.org/zap"
-
 	"github.com/carv-protocol/d.a.t.a/src/characters"
 	"github.com/carv-protocol/d.a.t.a/src/internal/actions"
 	"github.com/carv-protocol/d.a.t.a/src/internal/data"
@@ -18,6 +15,9 @@ import (
 	"github.com/carv-protocol/d.a.t.a/src/internal/token"
 	"github.com/carv-protocol/d.a.t.a/src/internal/tools"
 	"github.com/carv-protocol/d.a.t.a/src/pkg/llm"
+
+	"github.com/google/uuid"
+	"go.uber.org/zap"
 )
 
 type Agent struct {

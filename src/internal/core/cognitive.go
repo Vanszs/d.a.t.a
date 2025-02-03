@@ -10,6 +10,7 @@ import (
 	"github.com/carv-protocol/d.a.t.a/src/characters"
 	"github.com/carv-protocol/d.a.t.a/src/internal/tasks"
 	"github.com/carv-protocol/d.a.t.a/src/pkg/llm"
+
 	"go.uber.org/zap"
 )
 
@@ -420,8 +421,9 @@ func (e *CognitiveEngine) processMessage(
 	ctx context.Context,
 	state *SystemState,
 	msg *SocialMessage,
+	historicalMsg []string,
 ) (*ProcessedMessage, error) {
-	prompt := buildMessagePrompt(state, msg)
+	prompt := buildMessagePrompt(state, msg, historicalMsg)
 	// Get LLM's analysis
 	response, err := e.llm.CreateCompletion(ctx, llm.CompletionRequest{
 		Model: "deepseek",

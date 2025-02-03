@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	_ "github.com/mattn/go-sqlite3"
 )
@@ -233,12 +234,20 @@ func (s *SQLiteStore) Get(ctx context.Context, tableName string, id string) (map
 	row := s.db.QueryRowContext(ctx, query, id)
 
 	// Scan the result
-	data := make(map[string]interface{})
-	if err := row.Scan(data); err != nil {
+	var createdAt time.Time
+	var content []byte
+	if err := row.Scan(&id, &createdAt, &content); err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
 		return nil, fmt.Errorf("failed to get data from %s: %w", tableName, err)
 	}
 
-	return data, nil
+	return map[string]interface{}{
+		"id":         id,
+		"created_at": createdAt,
+		"content":    content,
+	}, nil
 }
 
 // Close closes the database connection

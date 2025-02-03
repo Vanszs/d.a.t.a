@@ -468,7 +468,7 @@ func formatTools(tools []tools.Tool) string {
 	return result
 }
 
-func buildMessagePrompt(state *SystemState, msg *SocialMessage) string {
+func buildMessagePrompt(state *SystemState, msg *SocialMessage, historicalMsgs []string) string {
 	// Create a prompt that explains all the possible types and asks for structured analysis
 	return fmt.Sprintf(`
 %s
@@ -478,6 +478,8 @@ Available Entity Types: person, product, company, location, datetime, crypto, wa
 Available Emotion Types: positive, negative, neutral
 
 For the message: "%s"
+
+Historical messages and context from this user: %s
 
 Return a JSON object with these fields:
 {
@@ -489,5 +491,5 @@ Return a JSON object with these fields:
 	"response_msg": "appropriate response message if should_reply is true",
 	"should_generate_task": boolean indicating if this requires task creation,
 	"should_generate_action": boolean indicating if this requires action generation
-}`, getGeneralInfo(state), msg.Platform, msg.Content)
+}`, getGeneralInfo(state), msg.Platform, strings.Join(historicalMsgs, ";"), msg.Content)
 }

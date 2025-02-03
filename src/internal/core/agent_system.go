@@ -2,6 +2,7 @@ package core
 
 import (
 	"context"
+	"fmt"
 	"plugin"
 	"sync"
 	"time"
@@ -121,9 +122,16 @@ func (a *Agent) monitorSocialInputs() {
 
 func (a *Agent) processMessage(msg *SocialMessage) error {
 	state := a.getCurrentState()
-	// Build prompt for LLM
 
-	processedMsg, err := a.cognitive.processMessage(a.ctx, state, msg)
+	stakeholder, err := a.stakeholders.FetchOrCreateStakeholder(a.ctx, msg.FromUser)
+	if err != nil {
+		a.logger.Errorw("Error fetching stakeholder", "error", err)
+		return err
+	}
+
+	a.logger.Infof("Historical message: %+v", stakeholder.HistoricalMsgs)
+
+	processedMsg, err := a.cognitive.processMessage(a.ctx, state, msg, stakeholder.HistoricalMsgs)
 	if err != nil {
 		a.logger.Errorw("Error processing message", "error", err)
 		return err
@@ -133,6 +141,20 @@ func (a *Agent) processMessage(msg *SocialMessage) error {
 	// a.stakeholders.FetchOrCreateStakeholder(a.ctx, msg.FromUser)
 
 	a.logger.Infof("Processed message: %+v", processedMsg)
+
+	err = a.stakeholders.AddHistoricalMsg(
+		a.ctx,
+		msg.FromUser,
+		[]string{
+			fmt.Sprintf("%s: %s", msg.FromUser, msg.Content),
+			fmt.Sprintf("%s: %s", state.Character.Name, processedMsg.ResponseMsg),
+		},
+	)
+	if err != nil {
+		a.logger.Errorw("Error adding historical message", "error", err)
+		return err
+	}
+
 	// TODO: process task generation and action taking
 	if processedMsg.ShouldReply {
 		// Send response
