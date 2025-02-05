@@ -91,7 +91,6 @@ func NewSocialClient(
 	if twitterConfig != nil {
 		client, err := clients.NewTwitterClient(twitterConfig)
 		if err != nil {
-			fmt.Println("generate client err:", err)
 			panic(err)
 		}
 		cli.twitterClient = client
@@ -163,11 +162,9 @@ func (sc *SocialClientImpl) monitorTwitter(ctx context.Context) {
 			tweets, err := sc.twitterClient.MonitorMentioned(context.Background())
 			if err != nil {
 				// TODO: handle error
-				fmt.Println("monitor twitter err:", err)
 				return
 			}
 
-			fmt.Println("got tweet!!!", tweets)
 			for _, tweet := range tweets {
 				sc.socialMsgChannel <- SocialMessage{
 					Type:        "mention",
@@ -189,7 +186,6 @@ func (sc *SocialClientImpl) monitorDiscord(ctx context.Context) {
 	for {
 		select {
 		case msg := <-channel:
-			fmt.Println("got discord msg!!!", msg)
 			sc.socialMsgChannel <- SocialMessage{
 				Type:     "message",
 				Content:  msg.Content,

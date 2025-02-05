@@ -44,7 +44,6 @@ type EmbeddingResponse struct {
 }
 
 func NewClient(apiKey string) *Client {
-	fmt.Println("api key:", apiKey)
 	client := openai.NewClient(
 		option.WithAPIKey(apiKey), // defaults to os.LookupEnv("OPENAI_API_KEY")
 	)

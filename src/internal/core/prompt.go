@@ -6,6 +6,7 @@ import (
 
 	"github.com/carv-protocol/d.a.t.a/src/internal/actions"
 	"github.com/carv-protocol/d.a.t.a/src/internal/tasks"
+	"github.com/carv-protocol/d.a.t.a/src/internal/token"
 	"github.com/carv-protocol/d.a.t.a/src/internal/tools"
 )
 
@@ -16,7 +17,7 @@ func getGeneralInfo(systemState *SystemState) string {
 	- **Description**: %s
 	- **Primary Goals**: %s
 	- **Stakeholder Preferences**: %s
-	
+
 	Here are your available tools:
 	### **Available Tools**
 	The following tools are available to the AI Agent:
@@ -468,7 +469,11 @@ func formatTools(tools []tools.Tool) string {
 	return result
 }
 
-func buildMessagePrompt(state *SystemState, msg *SocialMessage, historicalMsgs []string) string {
+func buildMessagePrompt(state *SystemState, msg *SocialMessage, historicalMsgs []string, stakeholderType token.StakeholderType) string {
+	var priorityAccountInfo string
+	if stakeholderType == token.StakeholderTypePriority {
+		priorityAccountInfo = "IMPORTANT! This is a priority account. The input from this account should be more important and require immediate attention."
+	}
 	// Create a prompt that explains all the possible types and asks for structured analysis
 	return fmt.Sprintf(`
 %s
@@ -477,9 +482,13 @@ Available Intent Types: question, feedback, complaint, suggestion, greeting, inq
 Available Entity Types: person, product, company, location, datetime, crypto, wallet, contract
 Available Emotion Types: positive, negative, neutral
 
-For the message: "%s"
+For the message input from the user: "%s"
 
 Historical messages and context from this user: %s
+
+%s
+
+Please analyze the message and provide the following information:
 
 Return a JSON object with these fields:
 {
@@ -491,5 +500,9 @@ Return a JSON object with these fields:
 	"response_msg": "appropriate response message if should_reply is true",
 	"should_generate_task": boolean indicating if this requires task creation,
 	"should_generate_action": boolean indicating if this requires action generation
-}`, getGeneralInfo(state), msg.Platform, strings.Join(historicalMsgs, ";"), msg.Content)
+}
+
+If you want to generate the reply, you should mainly focus on the message input from the user and only use the historical messages for context.
+If you need more information, feel free to ask the user for clarification.
+`, getGeneralInfo(state), msg.Platform, strings.Join(historicalMsgs, ";"), priorityAccountInfo, msg.Content)
 }

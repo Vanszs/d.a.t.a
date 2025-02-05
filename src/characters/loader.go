@@ -15,9 +15,10 @@ type CharacterConfig struct {
 		Tone        []string `json:"tone"`
 		Constraints []string `json:"constraints"`
 	} `json:"style"`
-	Topics      []string           `json:"topics"`
-	Goals       []Goal             `json:"goals"`
-	Preferences map[string]float64 `json:"preferences"`
+	Topics           []string           `json:"topics"`
+	Goals            []Goal             `json:"goals"`
+	PriorityAccounts []Account          `json:"priority_accounts"`
+	Preferences      map[string]float64 `json:"preferences"`
 }
 
 type Goal struct {
@@ -42,13 +43,14 @@ func LoadFromFile(path string) (*Character, error) {
 
 func NewCharacter(config CharacterConfig) *Character {
 	return &Character{
-		Name:        config.Name,
-		System:      config.System,
-		Bio:         config.Bio,
-		Lore:        config.Lore,
-		Style:       StyleGuide(config.Style),
-		Topics:      config.Topics,
-		Goals:       config.Goals,
-		Preferences: config.Preferences,
+		Name:             config.Name,
+		System:           config.System,
+		Bio:              config.Bio,
+		Lore:             config.Lore,
+		Style:            StyleGuide(config.Style),
+		Topics:           config.Topics,
+		Goals:            config.Goals,
+		PriorityAccounts: config.PriorityAccounts,
+		Preferences:      config.Preferences,
 	}
 }
