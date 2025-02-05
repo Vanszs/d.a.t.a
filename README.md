@@ -96,3 +96,16 @@ Special thanks to:
 - The Eliza communities
 - Our data provider partners
 - All contributors and supporters
+
+
+## TODO List
+1. Deepseek, Claude, Llama, and more models.
+2. Telegram support.
+3. Twitter support.
+4. Enrich stakeholder token info.
+5. Postgres storage implementation and testing.
+6. Cache
+7. Testing
+8. Add dev admim account
+9. Actions
+10. Plugins

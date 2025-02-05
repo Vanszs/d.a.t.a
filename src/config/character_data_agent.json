@@ -66,6 +66,12 @@
       "priority": 0.7
     }
   ],
+  "priority_accounts": [
+    {
+      "platform": "discord",
+      "id": "1233417635975266407"
+    }
+  ],
   "preferences": {
     "data_driven_decisions": 0.9,
     "stakeholder_involvement": 0.85,

@@ -20,9 +20,17 @@ type StakeholderManager struct {
 	dataManager   data.Manager
 }
 
+type StakeholderType string
+
+const (
+	StakeholderTypeUser     StakeholderType = "user"
+	StakeholderTypePriority StakeholderType = "priority"
+)
+
 type Stakeholder struct {
 	ID             string
 	CarvID         string
+	Type           StakeholderType
 	Token          *big.Int
 	HistoricalMsgs []string
 }
@@ -35,17 +43,19 @@ func NewStakeholderManager(memoryManager memory.Manager, tokenManager *TokenMana
 }
 
 // ProcessMessage handles new input from social media
-func (sm *StakeholderManager) FetchOrCreateStakeholder(ctx context.Context, id string) (*Stakeholder, error) {
+func (sm *StakeholderManager) FetchOrCreateStakeholder(ctx context.Context, id, platform string, stakeholderType StakeholderType) (*Stakeholder, error) {
+	key := fmt.Sprintf("%s:%s", platform, id)
 	var stakeholder *Stakeholder
-	mem, err := sm.memoryManager.GetMemory(ctx, id)
+	mem, err := sm.memoryManager.GetMemory(ctx, key)
 	if err != nil {
 		return nil, err
 	}
 	// stakeholder doesn't exist
 	if mem == nil {
 		stakeholder = &Stakeholder{
-			ID:             id,
+			ID:             key,
 			CarvID:         "",
+			Type:           stakeholderType,
 			Token:          big.NewInt(0),
 			HistoricalMsgs: []string{},
 		}
@@ -55,7 +65,7 @@ func (sm *StakeholderManager) FetchOrCreateStakeholder(ctx context.Context, id s
 			return nil, err
 		}
 		sm.memoryManager.CreateMemory(ctx, memory.Memory{
-			MemoryID:  id,
+			MemoryID:  key,
 			CreatedAt: time.Now(),
 			Content:   res,
 		})
@@ -70,9 +80,10 @@ func (sm *StakeholderManager) FetchOrCreateStakeholder(ctx context.Context, id s
 }
 
 // AddHistoricalMsg adds a new historical message to a stakeholder's record
-func (sm *StakeholderManager) AddHistoricalMsg(ctx context.Context, id string, msgs []string) error {
+func (sm *StakeholderManager) AddHistoricalMsg(ctx context.Context, id, platform string, msgs []string) error {
+	key := fmt.Sprintf("%s:%s", platform, id)
 	var stakeholder *Stakeholder
-	mem, err := sm.memoryManager.GetMemory(ctx, id)
+	mem, err := sm.memoryManager.GetMemory(ctx, key)
 	if err != nil {
 		return err
 	}

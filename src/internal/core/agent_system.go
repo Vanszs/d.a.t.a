@@ -6,11 +6,26 @@ import (
 	"plugin"
 	"sync"
 	"time"
+
+	"github.com/carv-protocol/d.a.t.a/src/internal/token"
 )
 
 // Main system routines
 func (a *Agent) Start() error {
 	a.logger.Info("Starting agent system")
+
+	for _, account := range a.character.PriorityAccounts {
+		_, err := a.stakeholders.FetchOrCreateStakeholder(
+			a.ctx,
+			account.ID,
+			account.Platform,
+			token.StakeholderTypePriority,
+		)
+		if err != nil {
+			return err
+		}
+	}
+
 	var wg sync.WaitGroup
 
 	// Start periodic task evaluation
@@ -41,10 +56,10 @@ func (a *Agent) runPeriodicEvaluation() {
 	defer ticker.Stop()
 
 	// a.evaluateAndExecuteTasks()
-	// a.logger.Infof("First evaluation in %d seconds", 5)
 	for {
 		select {
 		case <-ticker.C:
+			// TODO: enable execution
 			// a.evaluateAndExecuteTasks()
 		case <-a.ctx.Done():
 			return
@@ -85,6 +100,8 @@ func (a *Agent) evaluateAndExecuteTasks() error {
 func (a *Agent) getCurrentState() *SystemState {
 	pref, _ := a.stakeholders.GetAggregatedPreferences(a.ctx)
 
+	// a.dataManager.FetchTokenInfo(a.ctx, )
+
 	return &SystemState{
 		Character:              a.character,
 		AvailableTools:         a.toolManager.AvailableTools(),
@@ -98,18 +115,9 @@ func (a *Agent) getCurrentState() *SystemState {
 
 // Social media monitoring
 func (a *Agent) monitorSocialInputs() {
-	// a.processMessage(&SocialMessage{
-	// 	Type:     "post",
-	// 	Content:  "Hey there! Can you tell me what you are able to do to boost the token price?",
-	// 	Platform: "twitter",
-	// })
-
-	ticker := time.NewTicker(5 * time.Minute)
-	defer ticker.Stop()
-
-	// TODO: fix this
-	go a.socialClient.MonitorMessages(a.ctx)
 	msgQueue := a.socialClient.GetMessageChannel()
+	// TODO graceful shutdown
+	go a.socialClient.MonitorMessages(a.ctx)
 	for {
 		select {
 		case msg := <-msgQueue:
@@ -123,15 +131,23 @@ func (a *Agent) monitorSocialInputs() {
 func (a *Agent) processMessage(msg *SocialMessage) error {
 	state := a.getCurrentState()
 
-	stakeholder, err := a.stakeholders.FetchOrCreateStakeholder(a.ctx, msg.FromUser)
+	stakeholder, err := a.stakeholders.FetchOrCreateStakeholder(
+		a.ctx,
+		msg.FromUser,
+		msg.Platform,
+		token.StakeholderTypeUser,
+	)
 	if err != nil {
 		a.logger.Errorw("Error fetching stakeholder", "error", err)
 		return err
 	}
 
-	a.logger.Infof("Historical message: %+v", stakeholder.HistoricalMsgs)
+	// a.logger.Infof("Historical message: %+v", stakeholder.HistoricalMsgs)
+	a.logger.Infof("Priority accounts: %t", msg.FromUser, msg.Platform, stakeholder.Type == token.StakeholderTypePriority)
 
-	processedMsg, err := a.cognitive.processMessage(a.ctx, state, msg, stakeholder.HistoricalMsgs)
+	// a.dataManager.FetchStakeholderInfo(a.ctx, stakeholder.ID)
+
+	processedMsg, err := a.cognitive.processMessage(a.ctx, state, msg, stakeholder)
 	if err != nil {
 		a.logger.Errorw("Error processing message", "error", err)
 		return err
@@ -145,6 +161,7 @@ func (a *Agent) processMessage(msg *SocialMessage) error {
 	err = a.stakeholders.AddHistoricalMsg(
 		a.ctx,
 		msg.FromUser,
+		msg.Platform,
 		[]string{
 			fmt.Sprintf("%s: %s", msg.FromUser, msg.Content),
 			fmt.Sprintf("%s: %s", state.Character.Name, processedMsg.ResponseMsg),

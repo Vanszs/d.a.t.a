@@ -2,7 +2,6 @@ package clients
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/bwmarrin/discordgo"
 )
@@ -57,7 +56,6 @@ func MessageListener(
 	return func(discord *discordgo.Session, message *discordgo.MessageCreate) {
 		channel, err := discord.Channel(message.ChannelID)
 		if err != nil {
-			fmt.Println("Error getting channel: ", err)
 			return
 		}
 

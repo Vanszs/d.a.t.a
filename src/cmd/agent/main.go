@@ -90,7 +90,6 @@ func main() {
 	}
 
 	// Setup LLM client
-	fmt.Print(config.LLMConfig)
 	llmClient := llm.NewClient((*llm.LLMConfig)(&config.LLMConfig))
 
 	dataManager := data.NewManager(llmClient)

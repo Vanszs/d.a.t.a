@@ -65,11 +65,8 @@ func NewTwitterClient(twitterConfig *TwitterConfig) (*TwitterClient, error) {
 
 	u, err := userlookup.GetMe(context.Background(), c, p)
 	if err != nil {
-		fmt.Println(err)
 		return nil, err
 	}
-
-	fmt.Println("me is ", u.Data.Username)
 
 	return &TwitterClient{
 		client: c,
@@ -82,7 +79,6 @@ func (t *TwitterClient) MonitorMentioned(ctx context.Context) ([]*Tweet, error) 
 	// TODO: config time duration
 	startTime := time.Now().Add(-15 * time.Minute)
 	l := &searchTypes.ListRecentInput{
-
 		StartTime: &startTime,
 		SortOrder: searchTypes.ListSortOrderRecency,
 		Query:     fmt.Sprintf("@%s", *t.user.Username),
