@@ -22,3 +22,7 @@ data:
     url: "https://api.carv.io/v1"
     # API key for CarvID
     api_key: "your-carvid-api-key-here"
+
+token:
+  network: "base"
+  ticker: "carv"

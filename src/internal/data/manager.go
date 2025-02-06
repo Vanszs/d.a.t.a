@@ -2,9 +2,9 @@ package data
 
 import (
 	"context"
-	"fmt"
 	"math/big"
 
+	"github.com/carv-protocol/d.a.t.a/src/pkg/carv"
 	"github.com/carv-protocol/d.a.t.a/src/pkg/llm"
 )
 
@@ -18,15 +18,19 @@ type StakeholderInfo struct {
 
 type TokenInfo struct {
 	Network      string
-	Name         string
 	ContractAddr string
 	Balance      *big.Int
 }
 
 type Manager interface {
-	Register(ctx context.Context, source DataSource) error
-	// FetchData(ctx context.Context, dataType string, input interface{}) ([]DataOutput, error)
-	// FetchStakeholderInfo(ctx context.Context, stakeholderID string) (StakeholderInfo, error)
+	// Register(ctx context.Context, source DataSource) error
+	GetTokenBalance(
+		ctx context.Context,
+		id string,
+		platform string,
+		network string,
+		ticker string,
+	) (*TokenInfo, error)
 }
 
 type DataSource interface {
@@ -36,61 +40,28 @@ type DataSource interface {
 }
 
 type managerImpl struct {
-	sources map[string]DataSource
+	carvClient *carv.Client
 	// carvDataSource
 	llmClient llm.Client
 }
 
 type DataOutput struct {
-	blob []byte
+	Blob []byte
 }
 
-func NewManager(llmClient llm.Client) *managerImpl {
+func NewManager(llmClient llm.Client, carvClient *carv.Client) *managerImpl {
 	return &managerImpl{
-		sources:   make(map[string]DataSource),
-		llmClient: llmClient,
+		carvClient: carvClient,
+		llmClient:  llmClient,
 	}
 }
 
-// Register a plugin
-func (m *managerImpl) Register(ctx context.Context, source DataSource) error {
-	if _, exists := m.sources[source.Name()]; exists {
-		return fmt.Errorf("data source %s already registered", source.Name())
-	}
-
-	if err := source.Initialize(ctx); err != nil {
-		return fmt.Errorf("failed to initialize source %s: %w", source.Name(), err)
-	}
-
-	m.sources[source.Name()] = source
-
-	return nil
-}
-
-// func (m *managerImpl) FetchData(ctx context.Context, dataType string, input interface{}) ([]DataOutput, error) {
-// 	dataOutput := []DataOutput{}
-// 	for _, source := range m.sources {
-// 		data, err := source.Fetch(ctx, dataType, input)
-// 		if err != nil {
-// 			return nil, err
-// 		}
-// 		dataOutput = append(dataOutput, data)
-// 	}
-// 	// Initialize other providers...
-// 	return dataOutput, nil
-// }
-
-func (m *managerImpl) FetchStakeholderInfo(ctx context.Context, id string, platform string) (*StakeholderInfo, error) {
-	// for _, dataSource := range m.sources {
-	// 	data, err := dataSource.Fetch(ctx, "carv_id", stakeholderID)
-	// 	if err != nil {
-	// 		return nil, err
-	// 	}
-
-	// 	if data != nil {
-	// 		data.blob
-	// 	}
-	// }
-
+func (m *managerImpl) GetStakeholderInfo(
+	ctx context.Context,
+	id string,
+	platform string,
+	network string,
+	ticker string,
+) (*StakeholderInfo, error) {
 	return nil, nil
 }

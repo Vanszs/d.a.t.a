@@ -33,6 +33,7 @@ type Agent struct {
 	logger        *zap.SugaredLogger
 	toolManager   *tools.Manager
 	stakeholders  *token.StakeholderManager
+	TokenManager  *token.TokenManager
 	socialClient  SocialClient
 	Goals         []Goal
 	ctx           context.Context
@@ -54,8 +55,9 @@ type SystemState struct {
 	AvailableTools   []tools.Tool
 	AvailableActions []actions.Action
 	// Task and action information
-	ActiveTasks    []*tasks.Task
-	PendingActions []*actions.Action
+	ActiveTasks     []*tasks.Task
+	PendingActions  []*actions.Action
+	NativeTokenInfo *token.TokenInfo
 }
 
 type Goal struct {
@@ -76,6 +78,7 @@ type AgentConfig struct {
 	ActionManager actions.Manager
 	SocialClient  SocialClient
 	ToolsManager  *tools.Manager
+	TokenManager  *token.TokenManager
 	Training      struct {
 		Enabled       bool
 		MaxIterations int
@@ -126,6 +129,7 @@ func NewAgent(config AgentConfig) *Agent {
 		cancel:        cancel,
 		taskManager:   config.TaskManager,
 		actionManager: config.ActionManager,
+		TokenManager:  config.TokenManager,
 	}
 }
 

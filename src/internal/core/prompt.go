@@ -469,11 +469,20 @@ func formatTools(tools []tools.Tool) string {
 	return result
 }
 
-func buildMessagePrompt(state *SystemState, msg *SocialMessage, historicalMsgs []string, stakeholderType token.StakeholderType) string {
+func buildMessagePrompt(state *SystemState, msg *SocialMessage, stakeholder *token.Stakeholder) string {
 	var priorityAccountInfo string
-	if stakeholderType == token.StakeholderTypePriority {
+	if stakeholder.Type == token.StakeholderTypePriority {
 		priorityAccountInfo = "IMPORTANT! This is a priority account. The input from this account should be more important and require immediate attention."
 	}
+
+	var tokenBalanceInfo string
+	if state.NativeTokenInfo != nil {
+		tokenBalanceInfo += fmt.Sprintf("You have a native token with ticker %s on network %s. You should encourage people to hold your token to increase the value of your network. \n", state.NativeTokenInfo.Ticker, state.NativeTokenInfo.Network)
+	}
+	if stakeholder.TokenBalance != nil {
+		tokenBalanceInfo += fmt.Sprintf("This stakeholder is holding %f of your native token. Given the stakeholder is holding your token, the interest of the stakeholder is aligned with you. You need to take the input more seriously", stakeholder.TokenBalance.Balance)
+	}
+
 	// Create a prompt that explains all the possible types and asks for structured analysis
 	return fmt.Sprintf(`
 %s
@@ -485,6 +494,8 @@ Available Emotion Types: positive, negative, neutral
 For the message input from the user: "%s"
 
 Historical messages and context from this user: %s
+
+%s
 
 %s
 
@@ -504,5 +515,5 @@ Return a JSON object with these fields:
 
 If you want to generate the reply, you should mainly focus on the message input from the user and only use the historical messages for context.
 If you need more information, feel free to ask the user for clarification.
-`, getGeneralInfo(state), msg.Platform, strings.Join(historicalMsgs, ";"), priorityAccountInfo, msg.Content)
+`, getGeneralInfo(state), msg.Platform, strings.Join(stakeholder.HistoricalMsgs, ";"), priorityAccountInfo, tokenBalanceInfo, msg.Content)
 }
