@@ -8,7 +8,6 @@ import (
 	"math/big"
 	"time"
 
-	"github.com/carv-protocol/d.a.t.a/src/internal/data"
 	"github.com/carv-protocol/d.a.t.a/src/internal/memory"
 )
 
@@ -17,7 +16,6 @@ type StakeholderManager struct {
 	tokenManager  *TokenManager
 	memoryManager memory.Manager
 	store         *StakeholderStore
-	dataManager   data.Manager
 }
 
 type StakeholderType string
@@ -28,16 +26,17 @@ const (
 )
 
 type Stakeholder struct {
+	Key            string
 	ID             string
+	Platform       string
 	CarvID         string
 	Type           StakeholderType
-	Token          *big.Int
+	TokenBalance   *TokenBalance
 	HistoricalMsgs []string
 }
 
-func NewStakeholderManager(memoryManager memory.Manager, tokenManager *TokenManager, dataManager data.Manager) *StakeholderManager {
+func NewStakeholderManager(memoryManager memory.Manager) *StakeholderManager {
 	return &StakeholderManager{
-		tokenManager:  tokenManager,
 		memoryManager: memoryManager,
 	}
 }
@@ -53,10 +52,11 @@ func (sm *StakeholderManager) FetchOrCreateStakeholder(ctx context.Context, id, 
 	// stakeholder doesn't exist
 	if mem == nil {
 		stakeholder = &Stakeholder{
-			ID:             key,
+			Key:            key,
+			ID:             id,
 			CarvID:         "",
+			Platform:       platform,
 			Type:           stakeholderType,
-			Token:          big.NewInt(0),
 			HistoricalMsgs: []string{},
 		}
 

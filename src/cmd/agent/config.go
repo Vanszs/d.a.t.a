@@ -1,6 +1,7 @@
 package main
 
 import (
+	"github.com/carv-protocol/d.a.t.a/src/pkg/carv"
 	"github.com/carv-protocol/d.a.t.a/src/pkg/clients"
 	"github.com/carv-protocol/d.a.t.a/src/pkg/llm"
 )
@@ -18,10 +19,7 @@ type Config struct {
 	llm.LLMConfig `mapstructure:"llm_config"`
 
 	Data struct {
-		CarvID struct {
-			URL    string `mapstructure:"url"`
-			APIKey string `mapstructure:"api_key"`
-		} `mapstructure:"carvid"`
+		carv.CarvConfig `mapstructure:"carv"`
 	} `mapstructure:"data"`
 
 	Social struct {
@@ -29,4 +27,9 @@ type Config struct {
 		clients.DiscordConfig  `mapstructure:"discord"`
 		clients.TelegramConfig `mapstructure:"telegram"`
 	} `mapstructure:"social"`
+
+	Token struct {
+		Network string `mapstructure:"network"`
+		Ticker  string `mapstructure:"ticker"`
+	} `mapstructure:"token"`
 }

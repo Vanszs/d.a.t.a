@@ -424,7 +424,7 @@ func (e *CognitiveEngine) processMessage(
 	msg *SocialMessage,
 	stakeholder *token.Stakeholder,
 ) (*ProcessedMessage, error) {
-	prompt := buildMessagePrompt(state, msg, stakeholder.HistoricalMsgs, stakeholder.Type)
+	prompt := buildMessagePrompt(state, msg, stakeholder)
 	// Get LLM's analysis
 	response, err := e.llm.CreateCompletion(ctx, llm.CompletionRequest{
 		Model: "deepseek",
@@ -443,7 +443,6 @@ func (e *CognitiveEngine) processMessage(
 		return nil, err
 	}
 
-	e.logger.Info("LLM response: ", response)
 	// Parse LLM response into ProcessedMessage
 	return parseAnalysis(response)
 }

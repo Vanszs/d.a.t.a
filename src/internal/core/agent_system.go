@@ -100,7 +100,7 @@ func (a *Agent) evaluateAndExecuteTasks() error {
 func (a *Agent) getCurrentState() *SystemState {
 	pref, _ := a.stakeholders.GetAggregatedPreferences(a.ctx)
 
-	// a.dataManager.FetchTokenInfo(a.ctx, )
+	nativeToken, _ := a.TokenManager.NativeTokenInfo(a.ctx)
 
 	return &SystemState{
 		Character:              a.character,
@@ -110,6 +110,7 @@ func (a *Agent) getCurrentState() *SystemState {
 		AgentStates:            a.GetState(),
 		StakeholderPreferences: pref,
 		ActiveTasks:            a.taskManager.GetTasks(a.ctx),
+		NativeTokenInfo:        nativeToken,
 	}
 }
 
@@ -143,9 +144,16 @@ func (a *Agent) processMessage(msg *SocialMessage) error {
 	}
 
 	// a.logger.Infof("Historical message: %+v", stakeholder.HistoricalMsgs)
-	a.logger.Infof("Priority accounts: %t", msg.FromUser, msg.Platform, stakeholder.Type == token.StakeholderTypePriority)
+	a.logger.Infof("Priority accounts: %t", stakeholder.Type == token.StakeholderTypePriority)
 
-	// a.dataManager.FetchStakeholderInfo(a.ctx, stakeholder.ID)
+	balance, _ := a.TokenManager.FetchNativeTokenBalance(a.ctx, msg.FromUser, msg.Platform)
+	// TODO error handling
+
+	if balance != nil {
+		a.logger.Infof("Native token balance: %f", balance.Balance)
+		stakeholder.TokenBalance = balance
+	}
+
 	processedMsg, err := a.cognitive.processMessage(a.ctx, state, msg, stakeholder)
 	if err != nil {
 		a.logger.Errorw("Error processing message", "error", err)

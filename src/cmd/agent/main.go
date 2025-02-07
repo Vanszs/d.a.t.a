@@ -13,11 +13,11 @@ import (
 	"github.com/carv-protocol/d.a.t.a/src/characters"
 	"github.com/carv-protocol/d.a.t.a/src/internal/actions"
 	"github.com/carv-protocol/d.a.t.a/src/internal/core"
-	"github.com/carv-protocol/d.a.t.a/src/internal/data"
 	"github.com/carv-protocol/d.a.t.a/src/internal/memory"
 	"github.com/carv-protocol/d.a.t.a/src/internal/tasks"
 	"github.com/carv-protocol/d.a.t.a/src/internal/token"
 	"github.com/carv-protocol/d.a.t.a/src/internal/tools"
+	"github.com/carv-protocol/d.a.t.a/src/pkg/carv"
 	"github.com/carv-protocol/d.a.t.a/src/pkg/database/adapters"
 	"github.com/carv-protocol/d.a.t.a/src/pkg/llm"
 	customTools "github.com/carv-protocol/d.a.t.a/src/tools"
@@ -70,6 +70,8 @@ func loadConfig() (*Config, error) {
 		channelID = strings.Trim(channelID, "${}")
 		viper.Set("social.telegram.channel_id", channelID)
 	}
+	viper.Set("data.carv.base_url", viper.Get("CARV_DATA_BASE_URL"))
+	viper.Set("data.carv.api_key", viper.Get("CARV_DATA_API_KEY"))
 
 	// Environment variables take precedence
 	viper.AutomaticEnv()
@@ -99,11 +101,16 @@ func main() {
 	// Setup LLM client
 	llmClient := llm.NewClient((*llm.LLMConfig)(&config.LLMConfig))
 
-	dataManager := data.NewManager(llmClient)
-	memoryManager := memory.NewManager(store)
-	tokenManager := token.NewTokenManager(dataManager)
+	carvClient := carv.NewClient(config.Data.CarvConfig.APIKey, config.Data.CarvConfig.BaseURL)
 
-	stakeholderManager := token.NewStakeholderManager(memoryManager, tokenManager, dataManager)
+	// dataManager := data.NewManager(llmClient, carvClient)
+	memoryManager := memory.NewManager(store)
+	tokenManager := token.NewTokenManager(carvClient, &token.TokenInfo{
+		Network: config.Token.Network,
+		Ticker:  config.Token.Ticker,
+	})
+
+	stakeholderManager := token.NewStakeholderManager(memoryManager)
 
 	// Load character
 	character, err := characters.LoadFromFile(config.Character.Path)
@@ -125,16 +132,17 @@ func main() {
 
 	// Initialize system
 	agent := core.NewAgent(core.AgentConfig{
-		ID:            uuid.New(),
-		Character:     character,
-		LLMClient:     llmClient,
-		DataManager:   dataManager,
+		ID:        uuid.New(),
+		Character: character,
+		LLMClient: llmClient,
+		// DataManager:   dataManager,
 		MemoryManager: memoryManager,
 		Stakeholders:  stakeholderManager,
 		ToolsManager:  toolsManager,
 		SocialClient:  core.NewSocialClient(nil, &config.Social.DiscordConfig, &config.Social.TelegramConfig),
 		TaskManager:   tasks.NewManager(taskStore),
 		ActionManager: actionManager,
+		TokenManager:  tokenManager,
 	})
 
 	agent.RegisterPlugin(analysisPlugin)
