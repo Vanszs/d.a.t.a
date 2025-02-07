@@ -60,20 +60,14 @@ func loadEnvConfig() error {
 		return fmt.Errorf("error reading .env: %w", err)
 	}
 
-	fmt.Printf("Debug: LLM_API_KEY from env: %s\n", viper.GetString("LLM_API_KEY"))
-	fmt.Printf("Debug: llm_config.api_key before: %s\n", viper.GetString("llm_config.api_key"))
-
 	// First try to get API key from config file
 	apiKey := viper.GetString("llm_config.api_key")
 	if apiKey == "" {
 		// If not in config file, try to get from environment
 		if envKey := viper.GetString("LLM_API_KEY"); envKey != "" {
 			viper.Set("llm_config.api_key", envKey)
-			fmt.Printf("Debug: Setting API key from env: %s\n", envKey)
 		}
 	}
-
-	fmt.Printf("Debug: llm_config.api_key after: %s\n", viper.GetString("llm_config.api_key"))
 
 	// Map environment variables to config
 	envMappings := map[string]string{
@@ -91,7 +85,6 @@ func loadEnvConfig() error {
 
 	// Set provider-specific defaults if not already set
 	provider := viper.GetString("llm_config.provider")
-	fmt.Printf("Debug: Provider: %s\n", provider)
 
 	switch provider {
 	case "deepseek":
@@ -123,7 +116,6 @@ func loadEnvConfig() error {
 		viper.Set("social.telegram.channel_id", strings.Trim(channelID, "${}"))
 	}
 
-	fmt.Printf("Debug: Final llm_config.api_key: %s\n", viper.GetString("llm_config.api_key"))
 	return nil
 }
 
