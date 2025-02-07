@@ -268,23 +268,31 @@ func (a *Agent) Shutdown(ctx context.Context) error {
 }
 
 func NewAgent(config AgentConfig) *Agent {
-	ctx, cancel := context.WithCancel(context.Background())
-	logger, _ := zap.NewProduction()
+	if err := validateConfig(&config); err != nil {
+		panic(err)
+	}
 
-	return &Agent{
+	logger, _ := zap.NewDevelopment()
+	sugar := logger.Sugar()
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	agent := &Agent{
 		ID:            config.ID,
-		cognitive:     NewCognitiveEngine(config.LLMClient, config.Character, logger.Sugar()),
 		character:     config.Character,
-		logger:        logger.Sugar(),
-		toolManager:   config.ToolsManager,
-		stakeholders:  config.Stakeholders,
-		ctx:           ctx,
-		socialClient:  config.SocialClient,
-		cancel:        cancel,
+		cognitive:     NewCognitiveEngine(config.LLMClient, config.Model, config.Character, sugar),
 		taskManager:   config.TaskManager,
 		actionManager: config.ActionManager,
+		logger:        sugar,
+		toolManager:   config.ToolsManager,
+		stakeholders:  config.Stakeholders,
 		TokenManager:  config.TokenManager,
+		socialClient:  config.SocialClient,
+		ctx:           ctx,
+		cancel:        cancel,
 	}
+
+	return agent
 }
 
 func (a *Agent) GenerateTasks(ctx context.Context, state *SystemState) ([]*Task, error) {

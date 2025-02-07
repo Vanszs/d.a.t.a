@@ -13,6 +13,7 @@ type AgentConfig struct {
 	ID            uuid.UUID
 	Character     *characters.Character
 	LLMClient     llm.Client
+	Model         string
 	TaskManager   TaskManager
 	Stakeholders  StakeholderManager
 	ActionManager ActionManager
@@ -47,6 +48,9 @@ func validateConfig(config *AgentConfig) error {
 	}
 	if config.ID == uuid.Nil {
 		return fmt.Errorf("agent ID is required")
+	}
+	if config.Model == "" {
+		return fmt.Errorf("model name is required")
 	}
 	// Add more validation as needed
 	return nil
