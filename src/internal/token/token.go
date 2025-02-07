@@ -4,27 +4,17 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/carv-protocol/d.a.t.a/src/internal/core"
 	"github.com/carv-protocol/d.a.t.a/src/pkg/carv"
 )
-
-type TokenInfo struct {
-	Network      string
-	Ticker       string
-	ContractAddr string
-}
-
-type TokenBalance struct {
-	TokenInfo
-	Balance float64
-}
 
 type TokenManager struct {
 	// Implementation for token manager
 	carvClient  *carv.Client
-	nativeToken *TokenInfo
+	nativeToken *core.TokenInfo
 }
 
-func NewTokenManager(carvClient *carv.Client, nativeToken *TokenInfo) *TokenManager {
+func NewTokenManager(carvClient *carv.Client, nativeToken *core.TokenInfo) *TokenManager {
 	return &TokenManager{
 		carvClient:  carvClient,
 		nativeToken: nativeToken,
@@ -44,7 +34,7 @@ func (t *TokenManager) FetchNativeTokenBalance(
 	ctx context.Context,
 	id string,
 	platform string,
-) (*TokenBalance, error) {
+) (*core.TokenBalance, error) {
 	if t.nativeToken == nil {
 		return nil, fmt.Errorf("native token not set")
 	}
@@ -54,8 +44,8 @@ func (t *TokenManager) FetchNativeTokenBalance(
 			return nil, err
 		}
 
-		return &TokenBalance{
-			TokenInfo: TokenInfo{
+		return &core.TokenBalance{
+			TokenInfo: core.TokenInfo{
 				Network: t.nativeToken.Network,
 				Ticker:  t.nativeToken.Ticker,
 			},
@@ -68,7 +58,7 @@ func (t *TokenManager) FetchNativeTokenBalance(
 
 func (t *TokenManager) NativeTokenInfo(
 	ctx context.Context,
-) (*TokenInfo, error) {
+) (*core.TokenInfo, error) {
 	if t.nativeToken == nil {
 		return nil, nil
 	}

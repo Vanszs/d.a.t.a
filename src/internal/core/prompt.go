@@ -3,29 +3,28 @@ package core
 import (
 	"fmt"
 	"strings"
-
-	"github.com/carv-protocol/d.a.t.a/src/internal/actions"
-	"github.com/carv-protocol/d.a.t.a/src/internal/tasks"
-	"github.com/carv-protocol/d.a.t.a/src/internal/token"
-	"github.com/carv-protocol/d.a.t.a/src/internal/tools"
 )
 
 func getGeneralInfo(systemState *SystemState) string {
 	return fmt.Sprintf(`
-	You are an agent **%s**. Here are your basic information:
-	### **Agent Information**
+	You are **%s**. Here are your basic information:
+	### **Basic Information**
 	- **Description**: %s
 	- **Primary Goals**: %s
+	- **Bio**: %s
+	- **Lore**: %s
 	- **Stakeholder Preferences**: %s
 
 	Here are your available tools:
 	### **Available Tools**
 	The following tools are available to the AI Agent:
 	%s
-	Each tool has specific capabilities. When generating tasks, consider how these tools can be leveraged. You shouldn't create tasks that can't be fullfilled by the given tools.`,
+	Each tool has specific capabilities. When generating response, consider how these tools can be leveraged. You shouldn't create tasks that can't be fullfilled by the given tools.`,
 		systemState.Character.Name,
 		systemState.Character.System,
 		convertGoalsToString(systemState.AgentStates.Goals),
+		strings.Join(systemState.Character.Bio, "\n"),
+		strings.Join(systemState.Character.Lore, "\n"),
 		formatMap(systemState.StakeholderPreferences),
 		formatTools(systemState.AvailableTools),
 	)
@@ -224,7 +223,7 @@ Finalize the task into **Task structure**.
 	}
 }
 
-func generateActionsPromptFunc(systemState *SystemState, task *tasks.Task, actions []actions.Action) promptGeneratorFunc {
+func generateActionsPromptFunc(systemState *SystemState, task *Task, actions []Action) promptGeneratorFunc {
 	return func(stepPurpose StepPurpose, steps []*ThoughtStep) string {
 		switch stepPurpose {
 		case PurposeInitial:
@@ -461,7 +460,7 @@ func formatMap(data map[string]interface{}) string {
 	return result
 }
 
-func formatTools(tools []tools.Tool) string {
+func formatTools(tools []Tool) string {
 	var result string
 	for _, tool := range tools {
 		result += fmt.Sprintf("- **%s**: %s\n", tool.Name(), tool.Description())
@@ -469,9 +468,9 @@ func formatTools(tools []tools.Tool) string {
 	return result
 }
 
-func buildMessagePrompt(state *SystemState, msg *SocialMessage, stakeholder *token.Stakeholder) string {
+func buildMessagePrompt(state *SystemState, msg *SocialMessage, stakeholder *Stakeholder) string {
 	var priorityAccountInfo string
-	if stakeholder.Type == token.StakeholderTypePriority {
+	if stakeholder.Type == StakeholderTypePriority {
 		priorityAccountInfo = "IMPORTANT! This is a priority account. The input from this account should be more important and require immediate attention."
 	}
 
@@ -514,6 +513,16 @@ Return a JSON object with these fields:
 }
 
 If you want to generate the reply, you should mainly focus on the message input from the user and only use the historical messages for context.
-If you need more information, feel free to ask the user for clarification.
-`, getGeneralInfo(state), msg.Platform, strings.Join(stakeholder.HistoricalMsgs, ";"), priorityAccountInfo, tokenBalanceInfo, msg.Content)
+The reply message tone should be: %s
+
+If should generate task is true, you don't need user inputs and you can simply generate a task based on the goal of the agent.
+
+If you want to generate a task, you should mainly focus on the message input from the priority account or user who is holding your token.
+`, getGeneralInfo(state), msg.Platform, strings.Join(stakeholder.HistoricalMsgs, ";"), priorityAccountInfo, tokenBalanceInfo, msg.Content, strings.Join(state.Character.Style.Tone, ", "))
+}
+
+func buildSystemPrompt(state *SystemState) string {
+	return fmt.Sprintf(`
+   %s
+	`, getGeneralInfo(state))
 }

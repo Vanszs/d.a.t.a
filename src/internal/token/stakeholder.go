@@ -8,31 +8,14 @@ import (
 	"math/big"
 	"time"
 
+	"github.com/carv-protocol/d.a.t.a/src/internal/core"
 	"github.com/carv-protocol/d.a.t.a/src/internal/memory"
 )
 
 // StakeholderManager manages stakeholder interactions and influences
 type StakeholderManager struct {
-	tokenManager  *TokenManager
 	memoryManager memory.Manager
 	store         *StakeholderStore
-}
-
-type StakeholderType string
-
-const (
-	StakeholderTypeUser     StakeholderType = "user"
-	StakeholderTypePriority StakeholderType = "priority"
-)
-
-type Stakeholder struct {
-	Key            string
-	ID             string
-	Platform       string
-	CarvID         string
-	Type           StakeholderType
-	TokenBalance   *TokenBalance
-	HistoricalMsgs []string
 }
 
 func NewStakeholderManager(memoryManager memory.Manager) *StakeholderManager {
@@ -42,16 +25,21 @@ func NewStakeholderManager(memoryManager memory.Manager) *StakeholderManager {
 }
 
 // ProcessMessage handles new input from social media
-func (sm *StakeholderManager) FetchOrCreateStakeholder(ctx context.Context, id, platform string, stakeholderType StakeholderType) (*Stakeholder, error) {
+func (sm *StakeholderManager) FetchOrCreateStakeholder(
+	ctx context.Context,
+	id string,
+	platform string,
+	stakeholderType core.StakeholderType,
+) (*core.Stakeholder, error) {
 	key := fmt.Sprintf("%s:%s", platform, id)
-	var stakeholder *Stakeholder
+	var stakeholder *core.Stakeholder
 	mem, err := sm.memoryManager.GetMemory(ctx, key)
 	if err != nil {
 		return nil, err
 	}
 	// stakeholder doesn't exist
 	if mem == nil {
-		stakeholder = &Stakeholder{
+		stakeholder = &core.Stakeholder{
 			Key:            key,
 			ID:             id,
 			CarvID:         "",
@@ -82,7 +70,7 @@ func (sm *StakeholderManager) FetchOrCreateStakeholder(ctx context.Context, id, 
 // AddHistoricalMsg adds a new historical message to a stakeholder's record
 func (sm *StakeholderManager) AddHistoricalMsg(ctx context.Context, id, platform string, msgs []string) error {
 	key := fmt.Sprintf("%s:%s", platform, id)
-	var stakeholder *Stakeholder
+	var stakeholder *core.Stakeholder
 	mem, err := sm.memoryManager.GetMemory(ctx, key)
 	if err != nil {
 		return err

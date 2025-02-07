@@ -1,85 +1,21 @@
-package core
+package social
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"strings"
 	"sync"
 	"time"
 
+	"github.com/carv-protocol/d.a.t.a/src/internal/core"
 	"github.com/carv-protocol/d.a.t.a/src/pkg/clients"
 )
-
-type SocialClient interface {
-	SendMessage(msg SocialMessage) error
-	GetMessageChannel() chan SocialMessage
-	MonitorMessages(ctx context.Context) error
-}
-
-// IntentType defines different types of intents
-type IntentType string
-
-const (
-	IntentQuestion    IntentType = "question"
-	IntentFeedback    IntentType = "feedback"
-	IntentComplaint   IntentType = "complaint"
-	IntentSuggestion  IntentType = "suggestion"
-	IntentGreeting    IntentType = "greeting"
-	IntentInquiry     IntentType = "inquiry"
-	IntentRequest     IntentType = "request"
-	IntentAcknowledge IntentType = "acknowledge"
-)
-
-// EntityType defines different types of entities
-type EntityType string
-
-const (
-	EntityPerson   EntityType = "person"
-	EntityProduct  EntityType = "product"
-	EntityCompany  EntityType = "company"
-	EntityLocation EntityType = "location"
-	EntityDateTime EntityType = "datetime"
-	EntityCrypto   EntityType = "crypto"
-	EntityWallet   EntityType = "wallet"
-	EntityContract EntityType = "contract"
-)
-
-// EmotionType defines different types of emotions
-type EmotionType string
-
-const (
-	EmotionPositive EmotionType = "positive"
-	EmotionNegative EmotionType = "negative"
-	EmotionNeutral  EmotionType = "neutral"
-)
-
-type ProcessedMessage struct {
-	Intent               IntentType  `json:"intent"`
-	Entity               EntityType  `json:"entity"`
-	Emotion              EmotionType `json:"emotion"`
-	Confidence           float64     `json:"confidence"`
-	ShouldReply          bool        `json:"should_reply"`
-	ResponseMsg          string      `json:"response_msg"`
-	ShouldGenerateTask   bool        `json:"should_generate_task"`
-	ShouldGenerateAction bool        `json:"should_generate_action"`
-}
-
-type SocialMessage struct {
-	Type        string
-	Content     string
-	Platform    string
-	FromUser    string
-	TargetUsers []string
-	Metadata    map[string]interface{}
-}
 
 // SocialClientImpl handles social media interactions
 type SocialClientImpl struct {
 	twitterClient    *clients.TwitterClient
 	discordBot       *clients.DiscordBot
 	telegramBot      *clients.TelegramClient
-	socialMsgChannel chan SocialMessage
+	socialMsgChannel chan core.SocialMessage
 }
 
 func NewSocialClient(
@@ -88,19 +24,19 @@ func NewSocialClient(
 	telegramConfig *clients.TelegramConfig,
 ) *SocialClientImpl {
 	cli := &SocialClientImpl{
-		socialMsgChannel: make(chan SocialMessage),
+		socialMsgChannel: make(chan core.SocialMessage),
 	}
-	if twitterConfig != nil {
+	if twitterConfig != nil && twitterConfig.APIKey != "" {
 		client, err := clients.NewTwitterClient(twitterConfig)
 		if err != nil {
 			panic(err)
 		}
 		cli.twitterClient = client
 	}
-	if discordConfig != nil {
+	if discordConfig != nil && discordConfig.APIToken != "" {
 		cli.discordBot = clients.NewDiscordBot(discordConfig.APIToken)
 	}
-	if telegramConfig != nil {
+	if telegramConfig != nil && telegramConfig.Token != "" {
 		client, err := clients.NewTelegramClient(telegramConfig)
 		if err != nil {
 			panic(err)
@@ -111,21 +47,21 @@ func NewSocialClient(
 	return cli
 }
 
-func (sc *SocialClientImpl) SendMessage(msg SocialMessage) error {
+func (sc *SocialClientImpl) SendMessage(ctx context.Context, msg core.SocialMessage) error {
 	switch msg.Platform {
 	case "twitter":
-		return sc.twitterClient.Tweet(context.Background(), msg.Content)
+		return sc.twitterClient.Tweet(ctx, msg.Content)
 	case "discord":
-		return sc.discordBot.SendMessage(context.Background(), &clients.DiscordMsg{
+		return sc.discordBot.SendMessage(ctx, &clients.DiscordMsg{
 			AuthorID:  msg.FromUser,
 			Content:   msg.Content,
 			ChannelID: msg.Metadata["channel_id"].(string),
 		})
 	case "telegram":
-		return sc.telegramBot.BroadcastMessage(context.Background(), msg.Content)
+		return sc.telegramBot.BroadcastMessage(ctx, msg.Content)
 	case "all":
 		// Send to all platforms
-		if err := sc.twitterClient.Tweet(context.Background(), msg.Content); err != nil {
+		if err := sc.twitterClient.Tweet(ctx, msg.Content); err != nil {
 			return err
 		}
 		// return sc.discordBot.SendMessage(msg.Content)
@@ -134,12 +70,12 @@ func (sc *SocialClientImpl) SendMessage(msg SocialMessage) error {
 	return nil
 }
 
-func (sc *SocialClientImpl) GetMessageChannel() chan SocialMessage {
+func (sc *SocialClientImpl) GetMessageChannel() <-chan core.SocialMessage {
 	return sc.socialMsgChannel
 }
 
 // MonitorMessages starts monitoring messages from all configured platforms
-func (sc *SocialClientImpl) MonitorMessages(ctx context.Context) error {
+func (sc *SocialClientImpl) MonitorMessages(ctx context.Context) {
 	var wg sync.WaitGroup
 	if sc.twitterClient != nil {
 		wg.Add(1)
@@ -166,7 +102,6 @@ func (sc *SocialClientImpl) MonitorMessages(ctx context.Context) error {
 	}
 
 	wg.Wait()
-	return nil
 }
 
 func (sc *SocialClientImpl) monitorTwitter(ctx context.Context) {
@@ -185,7 +120,7 @@ func (sc *SocialClientImpl) monitorTwitter(ctx context.Context) {
 			}
 
 			for _, tweet := range tweets {
-				sc.socialMsgChannel <- SocialMessage{
+				sc.socialMsgChannel <- core.SocialMessage{
 					Type:        "mention",
 					Content:     tweet.Text,
 					Platform:    "twitter",
@@ -205,7 +140,7 @@ func (sc *SocialClientImpl) monitorDiscord(ctx context.Context) {
 	for {
 		select {
 		case msg := <-channel:
-			sc.socialMsgChannel <- SocialMessage{
+			sc.socialMsgChannel <- core.SocialMessage{
 				Type:     "message",
 				Content:  msg.Content,
 				Platform: "discord",
@@ -233,8 +168,8 @@ func (sc *SocialClientImpl) monitorTelegram(ctx context.Context) {
 	for {
 		select {
 		case msg := <-channel:
-			// Convert TelegramMessage to SocialMessage
-			socialMsg := SocialMessage{
+			// Convert TelegramMessage to core.SocialMessage
+			socialMsg := core.SocialMessage{
 				Type:     "message",
 				Content:  msg.Text,
 				Platform: "telegram",
@@ -263,29 +198,4 @@ func (sc *SocialClientImpl) monitorTelegram(ctx context.Context) {
 			return
 		}
 	}
-}
-
-func parseAnalysis(response string) (*ProcessedMessage, error) {
-	startTag := "```json\n"
-	endTag := "\n```"
-
-	startIndex := strings.Index(response, startTag)
-	if startIndex == -1 {
-		return nil, fmt.Errorf("start tag not found")
-	}
-	startIndex += len(startTag)
-
-	endIndex := strings.Index(response[startIndex:], endTag)
-	if endIndex == -1 {
-		return nil, fmt.Errorf("end tag not found")
-	}
-	endIndex += startIndex
-
-	jsonContent := response[startIndex:endIndex]
-
-	var processedMsg ProcessedMessage
-	if err := json.Unmarshal([]byte(jsonContent), &processedMsg); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal JSON: %w", err)
-	}
-	return &processedMsg, nil
 }

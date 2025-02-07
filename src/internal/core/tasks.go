@@ -5,26 +5,23 @@ import (
 	"fmt"
 	"strings"
 	"time"
-
-	"github.com/carv-protocol/d.a.t.a/src/internal/actions"
-	"github.com/carv-protocol/d.a.t.a/src/internal/tasks"
 )
 
 type TaskResult struct {
 	TaskID    string
-	Task      *tasks.Task
-	Actions   []actions.Action
+	Task      *Task
+	Actions   []Action
 	Result    []error
 	Timestamp time.Time
 }
 
 type TaskGeneration struct {
 	Chain *ThoughtChain
-	Tasks []*tasks.Task
+	Tasks []*Task
 }
 
 // convertThoughtChainToTasks converts a thought chain into concrete tasks
-func convertThoughtChainToTasks(chain *ThoughtChain) (*tasks.Task, error) {
+func convertThoughtChainToTasks(chain *ThoughtChain) (*Task, error) {
 	if len(chain.Steps) == 0 {
 		return nil, fmt.Errorf("thought chain is empty")
 	}
@@ -46,7 +43,7 @@ func convertThoughtChainToTasks(chain *ThoughtChain) (*tasks.Task, error) {
 
 	jsonContent := content[startIndex:endIndex]
 
-	var task tasks.Task
+	var task Task
 	if err := json.Unmarshal([]byte(jsonContent), &task); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal JSON: %w", err)
 	}

@@ -3,7 +3,7 @@ package tools
 import (
 	"context"
 
-	"github.com/carv-protocol/d.a.t.a/src/internal/actions"
+	"github.com/carv-protocol/d.a.t.a/src/internal/core"
 )
 
 type WalletTool struct {
@@ -22,6 +22,6 @@ func (t *WalletTool) Description() string {
 	It also allows you to create your own token, manage your own token, list your token on decentralized exchanges, etc.`
 }
 
-func (t *WalletTool) AvailableActions() []actions.Action {
+func (t *WalletTool) AvailableActions() []core.Action {
 	return nil
 }
