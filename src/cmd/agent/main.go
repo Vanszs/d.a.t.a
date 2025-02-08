@@ -92,6 +92,7 @@ func initializeAgent(ctx context.Context, config *Config) (*core.Agent, error) {
 		ID:           uuid.New(),
 		Character:    character,
 		LLMClient:    llmClient,
+		Model:        config.LLMConfig.Model,
 		Stakeholders: stakeholderManager,
 		ToolsManager: toolsManager,
 		SocialClient: social.NewSocialClient(

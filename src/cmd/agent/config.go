@@ -47,7 +47,8 @@ func setDefaultConfig() {
 	viper.SetDefault("database.path", "./data/data.db")
 	viper.SetDefault("llm_config.provider", "openai")
 	viper.SetDefault("llm_config.base_url", "https://api.openai.com/v1")
-	viper.SetDefault("shutdown_timeout", 30) // shutdown timeout in seconds
+	viper.SetDefault("llm_config.model", "gpt-4o") // Default model for OpenAI
+	viper.SetDefault("shutdown_timeout", 30)       // shutdown timeout in seconds
 }
 
 func loadEnvConfig() error {
@@ -57,6 +58,15 @@ func loadEnvConfig() error {
 
 	if err := viper.MergeInConfig(); err != nil {
 		return fmt.Errorf("error reading .env: %w", err)
+	}
+
+	// First try to get API key from config file
+	apiKey := viper.GetString("llm_config.api_key")
+	if apiKey == "" {
+		// If not in config file, try to get from environment
+		if envKey := viper.GetString("LLM_API_KEY"); envKey != "" {
+			viper.Set("llm_config.api_key", envKey)
+		}
 	}
 
 	// Map environment variables to config
@@ -73,8 +83,32 @@ func loadEnvConfig() error {
 		"CARV_DATA_API_KEY":      "data.carv.api_key",
 	}
 
+	// Set provider-specific defaults if not already set
+	provider := viper.GetString("llm_config.provider")
+
+	switch provider {
+	case "deepseek":
+		if !viper.IsSet("llm_config.base_url") {
+			viper.Set("llm_config.base_url", "https://api.deepseek.com")
+		}
+		if !viper.IsSet("llm_config.model") {
+			viper.Set("llm_config.model", "deepseek-chat")
+		}
+	case "openai":
+		if !viper.IsSet("llm_config.base_url") {
+			viper.Set("llm_config.base_url", "https://api.openai.com/v1")
+		}
+		if !viper.IsSet("llm_config.model") {
+			viper.Set("llm_config.model", "gpt-3.5-turbo")
+		}
+	}
+
 	for env, conf := range envMappings {
-		viper.Set(conf, viper.Get(env))
+		if env != "LLM_API_KEY" { // Skip LLM_API_KEY as we handled it above
+			if !viper.IsSet(conf) {
+				viper.Set(conf, viper.Get(env))
+			}
+		}
 	}
 
 	// Special handling for Telegram channel ID
@@ -129,8 +163,14 @@ func loadConfig() (*Config, error) {
 }
 
 func validateConfig(conf *Config) error {
-	if conf.LLMConfig.APIKey == "" || conf.LLMConfig.Provider == "" {
-		return ErrInvalidLLMConfig
+	if conf.LLMConfig.APIKey == "" {
+		return fmt.Errorf("%w: missing API key", ErrInvalidLLMConfig)
+	}
+	if conf.LLMConfig.Provider == "" {
+		return fmt.Errorf("%w: missing provider", ErrInvalidLLMConfig)
+	}
+	if conf.LLMConfig.Model == "" {
+		return fmt.Errorf("%w: missing model", ErrInvalidLLMConfig)
 	}
 	if conf.Database.Path == "" {
 		return ErrInvalidDBConfig

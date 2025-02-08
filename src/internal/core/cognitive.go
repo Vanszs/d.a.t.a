@@ -29,6 +29,7 @@ const (
 
 type CognitiveEngine struct {
 	llm           llm.Client
+	model         string
 	maxSteps      int
 	minConfidence float64
 	character     *characters.Character
@@ -68,9 +69,10 @@ type ThoughtStep struct {
 	Timestamp            time.Time
 }
 
-func NewCognitiveEngine(llmClient llm.Client, character *characters.Character, logger *zap.SugaredLogger) *CognitiveEngine {
+func NewCognitiveEngine(llmClient llm.Client, model string, character *characters.Character, logger *zap.SugaredLogger) *CognitiveEngine {
 	return &CognitiveEngine{
 		llm:           llmClient,
+		model:         model,
 		maxSteps:      3,
 		minConfidence: 0.7,
 		character:     character,
@@ -260,7 +262,7 @@ func (e *CognitiveEngine) generateThoughtStep(
 	prompt := promptGenerator(purpose, chain.Steps)
 
 	response, err := e.llm.CreateCompletion(ctx, llm.CompletionRequest{
-		Model: "deepseek",
+		Model: e.model,
 		Messages: []llm.Message{
 			{Role: "system", Content: buildSystemPrompt(state)},
 			{Role: "user", Content: prompt},
@@ -412,7 +414,7 @@ func (e *CognitiveEngine) processMessage(
 	prompt := buildMessagePrompt(state, msg, stakeholder)
 	// Get LLM's analysis
 	response, err := e.llm.CreateCompletion(ctx, llm.CompletionRequest{
-		Model: "deepseek",
+		Model: e.model,
 		Messages: []llm.Message{
 			{
 				Role:    "system",
