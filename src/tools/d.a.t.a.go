@@ -3,7 +3,7 @@ package tools
 import (
 	"context"
 
-	"github.com/carv-protocol/d.a.t.a/src/internal/core"
+	"github.com/carv-protocol/d.a.t.a/src/internal/actions"
 )
 
 type CARVDataTool struct {
@@ -24,6 +24,6 @@ func (t *CARVDataTool) Description() string {
 	It can also fetch the token info including the smart contract addresses and the token price.`
 }
 
-func (t *CARVDataTool) AvailableActions() []core.Action {
+func (t *CARVDataTool) AvailableActions() []actions.IAction {
 	return nil
 }

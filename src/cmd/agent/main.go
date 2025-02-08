@@ -87,8 +87,21 @@ func initializeAgent(ctx context.Context, config *Config) (*core.Agent, error) {
 	// Initialize tools
 	toolsManager := initializeTools()
 
+	// Initialize action manager and register actions
+	actionManager := actions.NewManager()
+	dbProvider := actions.NewDatabaseProvider(
+		config.Data.CarvConfig.BaseURL,
+		config.Data.CarvConfig.APIKey,
+		config.Token.Network,
+		llmClient,
+	)
+	fetchAction := actions.NewFetchTransactionAction(dbProvider)
+	if err := actionManager.Register(fetchAction); err != nil {
+		return nil, fmt.Errorf("failed to register fetch transaction action: %w", err)
+	}
+
 	// Create agent
-	agent := core.NewAgent(core.AgentConfig{
+	agentConfig := core.AgentConfig{
 		ID:           uuid.New(),
 		Character:    character,
 		LLMClient:    llmClient,
@@ -101,9 +114,14 @@ func initializeAgent(ctx context.Context, config *Config) (*core.Agent, error) {
 			&config.Social.TelegramConfig,
 		),
 		TaskManager:   tasks.NewManager(tasks.NewTaskStore(store)),
-		ActionManager: actions.NewManager(),
+		ActionManager: actionManager,
 		TokenManager:  tokenManager,
-	})
+	}
+
+	agent, err := core.NewAgent(agentConfig)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create agent: %w", err)
+	}
 
 	return agent, nil
 }

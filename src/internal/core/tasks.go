@@ -5,16 +5,20 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/carv-protocol/d.a.t.a/src/internal/actions"
 )
 
+// TaskResult represents the result of executing a task
 type TaskResult struct {
 	TaskID    string
 	Task      *Task
-	Actions   []Action
-	Result    []error
+	Actions   []actions.IAction
 	Timestamp time.Time
+	Result    []error
 }
 
+// TaskGeneration represents the result of generating tasks
 type TaskGeneration struct {
 	Chain *ThoughtChain
 	Tasks []*Task

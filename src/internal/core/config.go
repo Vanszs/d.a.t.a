@@ -5,21 +5,23 @@ import (
 	"time"
 
 	"github.com/carv-protocol/d.a.t.a/src/characters"
+	"github.com/carv-protocol/d.a.t.a/src/internal/actions"
 	"github.com/carv-protocol/d.a.t.a/src/pkg/llm"
 	"github.com/google/uuid"
 )
 
+// AgentConfig represents the configuration for creating a new agent
 type AgentConfig struct {
 	ID            uuid.UUID
 	Character     *characters.Character
 	LLMClient     llm.Client
 	Model         string
 	TaskManager   TaskManager
-	Stakeholders  StakeholderManager
-	ActionManager ActionManager
-	SocialClient  SocialClient
+	ActionManager actions.ActionManager
 	ToolsManager  ToolManager
+	Stakeholders  StakeholderManager
 	TokenManager  TokenManager
+	SocialClient  SocialClient
 	Training      struct {
 		Enabled       bool
 		MaxIterations int

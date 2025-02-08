@@ -3,21 +3,9 @@ package core
 import (
 	"context"
 	"time"
+
+	"github.com/carv-protocol/d.a.t.a/src/internal/actions"
 )
-
-// Action is an interface for actions that can be executed by the agent
-type Action interface {
-	Name() string
-	Description() string
-	Execute() error
-	Type() string
-}
-
-// ActionManager is an interface for managing actions
-type ActionManager interface {
-	Register(action Action) error
-	GetAvailableActions() []Action
-}
 
 // StakeholderType is an enum for stakeholder types
 type StakeholderType string
@@ -104,7 +92,7 @@ type Tool interface {
 	Initialize(ctx context.Context) error
 	Name() string
 	Description() string
-	AvailableActions() []Action
+	AvailableActions() []actions.IAction
 }
 
 // ToolManager is an interface for managing tools

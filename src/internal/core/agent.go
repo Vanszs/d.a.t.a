@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/carv-protocol/d.a.t.a/src/characters"
+	"github.com/carv-protocol/d.a.t.a/src/internal/actions"
+	"github.com/carv-protocol/d.a.t.a/src/pkg/utils"
 
 	"github.com/google/uuid"
 	"go.uber.org/zap"
@@ -19,7 +21,7 @@ type Agent struct {
 	cognitive     *CognitiveEngine
 	character     *characters.Character
 	taskManager   TaskManager
-	actionManager ActionManager
+	actionManager actions.ActionManager
 	logger        *zap.SugaredLogger
 	toolManager   ToolManager
 	stakeholders  StakeholderManager
@@ -43,10 +45,10 @@ type SystemState struct {
 
 	Character        *characters.Character
 	AvailableTools   []Tool
-	AvailableActions []Action
+	AvailableActions []actions.IAction
 	// Task and action information
 	ActiveTasks     []*Task
-	PendingActions  []Action
+	PendingActions  []actions.IAction
 	NativeTokenInfo *TokenInfo
 }
 
@@ -195,6 +197,67 @@ func (a *Agent) monitorSocialInputs() {
 	}
 }
 
+// executeAction executes a generic action
+func (a *Agent) executeAction(ctx context.Context, action actions.IAction) error {
+	a.logger.Infow("Executing action", "type", action.Type())
+	return action.Execute()
+}
+
+// executeActionWithResponse executes an action that returns a response
+func (a *Agent) executeActionWithResponse(ctx context.Context, action actions.IAction, msg *SocialMessage, processedMsg *ProcessedMessage) error {
+	a.logger.Infow("Executing action with response", "type", action.Type())
+
+	// Try to cast to FetchTransactionAction
+	if fetchAction, ok := action.(*actions.FetchTransactionAction); ok {
+		return a.executeFetchTransactionAction(ctx, fetchAction, msg, processedMsg)
+	}
+
+	// Handle other action types here
+	return fmt.Errorf("unsupported action type: %s", action.Type())
+}
+
+// executeFetchTransactionAction handles the fetch transaction action specifically
+func (a *Agent) executeFetchTransactionAction(ctx context.Context, action *actions.FetchTransactionAction, msg *SocialMessage, processedMsg *ProcessedMessage) error {
+	// Generate SQL query
+	query, err := action.GenerateQuery(ctx, msg.Content)
+	if err != nil {
+		a.logger.Errorw("Error generating SQL query", "error", err)
+		return err
+	}
+
+	// Execute the query
+	params := actions.FetchTransactionParams{
+		Limit: utils.IntPtr(10), // Default limit to 10 results
+	}
+	result, err := action.ExecuteWithParams(ctx, query, params)
+	if err != nil {
+		a.logger.Errorw("Error executing query", "error", err)
+		return err
+	}
+
+	// Build response content
+	responseContent := a.buildQueryResponse(processedMsg.ResponseMsg, result)
+
+	// Send response
+	return a.socialClient.SendMessage(ctx, SocialMessage{
+		Platform: msg.Platform,
+		Type:     "Response",
+		Content:  responseContent,
+		Metadata: msg.Metadata,
+	})
+}
+
+// buildQueryResponse builds the response content based on query results
+func (a *Agent) buildQueryResponse(defaultResponse string, result *actions.TransactionQueryResult) string {
+	if result != nil && result.Success {
+		if result.Analysis != "" {
+			return result.Analysis
+		}
+		return fmt.Sprintf("\n\nQuery Results:\n%s", actions.FormatQueryResult(result))
+	}
+	return defaultResponse
+}
+
 func (a *Agent) processMessage(msg *SocialMessage) error {
 	state := a.getCurrentState()
 
@@ -209,12 +272,9 @@ func (a *Agent) processMessage(msg *SocialMessage) error {
 		return err
 	}
 
-	// a.logger.Infof("Historical message: %+v", stakeholder.HistoricalMsgs)
 	a.logger.Infof("Priority accounts: %t", stakeholder.Type == StakeholderTypePriority)
 
 	balance, _ := a.TokenManager.FetchNativeTokenBalance(a.ctx, msg.FromUser, msg.Platform)
-	// TODO error handling
-
 	if balance != nil {
 		a.logger.Infof("Native token balance: %f", balance.Balance)
 		stakeholder.TokenBalance = balance
@@ -225,9 +285,6 @@ func (a *Agent) processMessage(msg *SocialMessage) error {
 		a.logger.Errorw("Error processing message", "error", err)
 		return err
 	}
-
-	// TODO fetch or create stakeholder
-	// a.stakeholders.FetchOrCreateStakeholder(a.ctx, msg.FromUser)
 
 	a.logger.Infof("Processed message: %+v", processedMsg)
 	err = a.stakeholders.AddHistoricalMsg(
@@ -244,9 +301,27 @@ func (a *Agent) processMessage(msg *SocialMessage) error {
 		return err
 	}
 
-	// TODO: process task generation and action taking
 	if processedMsg.ShouldReply {
-		// Send response
+		// Generate SQL query if needed
+		if processedMsg.ShouldGenerateAction {
+			// Get the fetch transaction action
+			action := a.actionManager.GetAction("fetch_transactions")
+			if action != nil {
+				if err := a.executeActionWithResponse(a.ctx, action, msg, processedMsg); err != nil {
+					a.logger.Errorw("Error executing action", "error", err)
+					// Send original response on error
+					a.socialClient.SendMessage(a.ctx, SocialMessage{
+						Platform: msg.Platform,
+						Type:     "Response",
+						Content:  processedMsg.ResponseMsg,
+						Metadata: msg.Metadata,
+					})
+				}
+				return nil
+			}
+		}
+
+		// If we didn't send a response with analysis, send the original response
 		a.socialClient.SendMessage(a.ctx, SocialMessage{
 			Platform: msg.Platform,
 			Type:     "Response",
@@ -267,9 +342,9 @@ func (a *Agent) Shutdown(ctx context.Context) error {
 	return nil
 }
 
-func NewAgent(config AgentConfig) *Agent {
+func NewAgent(config AgentConfig) (*Agent, error) {
 	if err := validateConfig(&config); err != nil {
-		panic(err)
+		return nil, fmt.Errorf("invalid agent config: %w", err)
 	}
 
 	logger, _ := zap.NewDevelopment()
@@ -292,7 +367,7 @@ func NewAgent(config AgentConfig) *Agent {
 		cancel:        cancel,
 	}
 
-	return agent
+	return agent, nil
 }
 
 func (a *Agent) GenerateTasks(ctx context.Context, state *SystemState) ([]*Task, error) {
@@ -344,15 +419,4 @@ func (a *Agent) GetState() *AgentState {
 		Goals:          a.Goals,
 		LastActionTime: time.Now(),
 	}
-}
-
-func (a *Agent) executeAction(ctx context.Context, action Action) error {
-	a.logger.Infow("Executing action", "type", action.Type)
-
-	// Execute action
-	if err := action.Execute(); err != nil {
-		return err
-	}
-
-	return nil
 }
