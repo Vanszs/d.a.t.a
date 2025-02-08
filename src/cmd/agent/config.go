@@ -67,6 +67,7 @@ func loadEnvConfig() error {
 		"TWITTER_API_KEY_SECRET": "social.twitter.api_key_secret",
 		"TWITTER_ACCESS_TOKEN":   "social.twitter.access_token",
 		"TWITTER_TOKEN_SECRET":   "social.twitter.token_secret",
+		"TWITTER_MONITOR_WINDOW": "social.twitter.monitor_window",
 		"DISCORD_API_TOKEN":      "social.discord.api_token",
 		"TELEGRAM_BOT_TOKEN":     "social.telegram.bot_token",
 		"CARV_DATA_BASE_URL":     "data.carv.base_url",

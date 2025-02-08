@@ -10,14 +10,16 @@ import (
 	"github.com/carv-protocol/d.a.t.a/src/pkg/clients"
 )
 
-// SocialClientImpl handles social media interactions
+// SocialClientImpl handles social media interactions and error reporting
 type SocialClientImpl struct {
 	twitterClient    *clients.TwitterClient
 	discordBot       *clients.DiscordBot
 	telegramBot      *clients.TelegramClient
 	socialMsgChannel chan core.SocialMessage
+	errorChannel     chan error // Channel for reporting errors to agent
 }
 
+// NewSocialClient creates a new social client with error handling
 func NewSocialClient(
 	twitterConfig *clients.TwitterConfig,
 	discordConfig *clients.DiscordConfig,
@@ -25,6 +27,7 @@ func NewSocialClient(
 ) *SocialClientImpl {
 	cli := &SocialClientImpl{
 		socialMsgChannel: make(chan core.SocialMessage),
+		errorChannel:     make(chan error, 100), // Buffered channel to prevent blocking
 	}
 	if twitterConfig != nil && twitterConfig.APIKey != "" {
 		client, err := clients.NewTwitterClient(twitterConfig)
@@ -61,10 +64,37 @@ func (sc *SocialClientImpl) SendMessage(ctx context.Context, msg core.SocialMess
 		return sc.telegramBot.BroadcastMessage(ctx, msg.Content)
 	case "all":
 		// Send to all platforms
-		if err := sc.twitterClient.Tweet(ctx, msg.Content); err != nil {
-			return err
+		var errs []error
+
+		if sc.twitterClient != nil {
+			if err := sc.twitterClient.Tweet(context.Background(), msg.Content); err != nil {
+				errs = append(errs, fmt.Errorf("twitter: %w", err))
+			}
 		}
-		// return sc.discordBot.SendMessage(msg.Content)
+
+		if sc.discordBot != nil {
+			if err := sc.discordBot.SendMessage(context.Background(), &clients.DiscordMsg{
+				AuthorID:  msg.FromUser,
+				Content:   msg.Content,
+				ChannelID: msg.Metadata["channel_id"].(string),
+			}); err != nil {
+				errs = append(errs, fmt.Errorf("discord: %w", err))
+			}
+		}
+
+		if sc.telegramBot != nil {
+			if err := sc.telegramBot.BroadcastMessage(context.Background(), msg.Content); err != nil {
+				errs = append(errs, fmt.Errorf("telegram: %w", err))
+			}
+		}
+
+		// If any errors occurred, return them combined
+		if len(errs) > 0 {
+			return fmt.Errorf("failed to send to some platforms: %v", errs)
+		}
+	default:
+		return fmt.Errorf("invalid platform: %s", msg.Platform)
+
 	}
 
 	return nil
@@ -72,6 +102,11 @@ func (sc *SocialClientImpl) SendMessage(ctx context.Context, msg core.SocialMess
 
 func (sc *SocialClientImpl) GetMessageChannel() <-chan core.SocialMessage {
 	return sc.socialMsgChannel
+}
+
+// GetErrorChannel returns the channel for monitoring errors
+func (sc *SocialClientImpl) GetErrorChannel() <-chan error {
+	return sc.errorChannel
 }
 
 // MonitorMessages starts monitoring messages from all configured platforms
@@ -104,19 +139,26 @@ func (sc *SocialClientImpl) MonitorMessages(ctx context.Context) {
 	wg.Wait()
 }
 
+// monitorTwitter monitors Twitter mentions and reports errors through errorChannel
 func (sc *SocialClientImpl) monitorTwitter(ctx context.Context) {
 	ticker := time.NewTicker(15 * time.Minute)
 	defer ticker.Stop()
-
-	// fmt.Println("try to monitor twitter")
 
 	for {
 		select {
 		case <-ticker.C:
 			tweets, err := sc.twitterClient.MonitorMentioned(context.Background())
 			if err != nil {
-				// TODO: handle error
-				return
+				// Report error through channel and continue monitoring
+				select {
+				case sc.errorChannel <- fmt.Errorf("twitter monitor error: %w", err):
+					// Error successfully reported
+				default:
+					// Channel is full, log locally
+					fmt.Printf("Error channel full, dropping error: %v\n", err)
+				}
+				//not return here, continue monitoring
+				continue
 			}
 
 			for _, tweet := range tweets {
