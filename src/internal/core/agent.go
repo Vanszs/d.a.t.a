@@ -302,9 +302,6 @@ func (a *Agent) processMessage(msg *SocialMessage) error {
 	}
 
 	if processedMsg.ShouldReply {
-		// force generate action
-		processedMsg.ShouldGenerateAction = true
-
 		// Generate SQL query if needed
 		if processedMsg.ShouldGenerateAction {
 			// Get the fetch transaction action
