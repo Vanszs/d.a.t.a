@@ -3,6 +3,8 @@ package core
 import (
 	"fmt"
 	"strings"
+
+	"github.com/carv-protocol/d.a.t.a/src/internal/actions"
 )
 
 func getGeneralInfo(systemState *SystemState) string {
@@ -223,7 +225,7 @@ Finalize the task into **Task structure**.
 	}
 }
 
-func generateActionsPromptFunc(systemState *SystemState, task *Task, actions []Action) promptGeneratorFunc {
+func generateActionsPromptFunc(systemState *SystemState, task *Task, actions []actions.IAction) promptGeneratorFunc {
 	return func(stepPurpose StepPurpose, steps []*ThoughtStep) string {
 		switch stepPurpose {
 		case PurposeInitial:
@@ -339,7 +341,7 @@ func generateActionsPromptFunc(systemState *SystemState, task *Task, actions []A
 		
 		**<think>**
 		- **Action Name**: [Action being analyzed]
-		- **Strategic Alignment**: [Does this align with the task’s core objectives?]
+		- **Strategic Alignment**: [Does this align with the task's core objectives?]
 		- **Feasibility**: [Is this achievable with current tools and resources?]
 		- **Risk and Challenges**: [What risks should be mitigated?]
 		- **Stakeholder Impact**: [How will stakeholders be affected?]

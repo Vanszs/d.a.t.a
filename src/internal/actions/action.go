@@ -4,15 +4,13 @@ import (
 	"context"
 	"fmt"
 	"time"
-
-	"github.com/carv-protocol/d.a.t.a/src/internal/core"
 )
 
 // ActionType defines the type of action to be executed
 type ActionType string
 
-// Action represents an action waiting to be executed
-type Action struct {
+// ActionDetails represents an action waiting to be executed
+type ActionDetails struct {
 	ID           string
 	Name         string
 	Type         ActionType
@@ -22,22 +20,22 @@ type Action struct {
 	Dependencies []string // IDs of actions that must complete first
 }
 
-func (a *Action) Execute(ctx context.Context) error {
+func (a *ActionDetails) Execute(ctx context.Context) error {
 	// TODO: Implement me
 	return nil
 }
 
 type ManagerImpl struct {
-	actions map[string]core.Action
+	actions map[string]IAction
 }
 
 func NewManager() *ManagerImpl {
 	return &ManagerImpl{
-		actions: make(map[string]core.Action),
+		actions: make(map[string]IAction),
 	}
 }
 
-func (m *ManagerImpl) Register(action core.Action) error {
+func (m *ManagerImpl) Register(action IAction) error {
 	name := action.Name()
 	if _, exists := m.actions[action.Name()]; exists {
 		return fmt.Errorf("action %s already registered", name)
@@ -47,6 +45,14 @@ func (m *ManagerImpl) Register(action core.Action) error {
 	return nil
 }
 
-func (m *ManagerImpl) GetAvailableActions() []core.Action {
-	return nil
+func (m *ManagerImpl) GetAvailableActions() []IAction {
+	actions := make([]IAction, 0, len(m.actions))
+	for _, action := range m.actions {
+		actions = append(actions, action)
+	}
+	return actions
+}
+
+func (m *ManagerImpl) GetAction(name string) IAction {
+	return m.actions[name]
 }
