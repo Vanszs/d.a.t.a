@@ -12,7 +12,7 @@ import (
 
 // SocialClientImpl handles social media interactions and error reporting
 type SocialClientImpl struct {
-	twitterClient    *clients.TwitterClient
+	twitterClient    clients.TwitterInterface
 	discordBot       *clients.DiscordBot
 	telegramBot      *clients.TelegramClient
 	socialMsgChannel chan core.SocialMessage
@@ -29,7 +29,7 @@ func NewSocialClient(
 		socialMsgChannel: make(chan core.SocialMessage),
 		errorChannel:     make(chan error, 100), // Buffered channel to prevent blocking
 	}
-	if twitterConfig != nil && twitterConfig.APIKey != "" {
+	if twitterConfig != nil {
 		client, err := clients.NewTwitterClient(twitterConfig)
 		if err != nil {
 			panic(err)
