@@ -60,17 +60,9 @@ func loadEnvConfig() error {
 		return fmt.Errorf("error reading .env: %w", err)
 	}
 
-	// First try to get API key from config file
-	apiKey := viper.GetString("llm_config.api_key")
-	if apiKey == "" {
-		// If not in config file, try to get from environment
-		if envKey := viper.GetString("LLM_API_KEY"); envKey != "" {
-			viper.Set("llm_config.api_key", envKey)
-		}
-	}
-
 	// Map environment variables to config
 	envMappings := map[string]string{
+		"LLM_PROVIDER":           "llm_config.provider",
 		"LLM_API_KEY":            "llm_config.api_key",
 		"TWITTER_BEARER_TOKEN":   "social.twitter.bearer_token",
 		"TWITTER_API_KEY":        "social.twitter.api_key",
@@ -82,6 +74,11 @@ func loadEnvConfig() error {
 		"TELEGRAM_BOT_TOKEN":     "social.telegram.bot_token",
 		"CARV_DATA_BASE_URL":     "data.carv.base_url",
 		"CARV_DATA_API_KEY":      "data.carv.api_key",
+	}
+
+	// override config values with environment variables
+	for env, conf := range envMappings {
+		viper.Set(conf, viper.Get(env))
 	}
 
 	// Set provider-specific defaults if not already set
@@ -101,14 +98,6 @@ func loadEnvConfig() error {
 		}
 		if !viper.IsSet("llm_config.model") {
 			viper.Set("llm_config.model", "gpt-3.5-turbo")
-		}
-	}
-
-	for env, conf := range envMappings {
-		if env != "LLM_API_KEY" { // Skip LLM_API_KEY as we handled it above
-			if !viper.IsSet(conf) {
-				viper.Set(conf, viper.Get(env))
-			}
 		}
 	}
 
