@@ -17,12 +17,23 @@ import (
 	searchTypes "github.com/michimani/gotwi/tweet/searchtweet/types"
 )
 
+// TwitterMode defines the mode of Twitter client operation
+type TwitterMode string
+
+const (
+	TwitterModeAPI     TwitterMode = "api"
+	TwitterModeScraper TwitterMode = "scraper"
+)
+
 type TwitterConfig struct {
-	APIKey        string `mapstructure:"api_key"`
-	APIKeySecret  string `mapstructure:"api_key_secret"`
-	AccessToken   string `mapstructure:"access_token"`
-	TokenSecret   string `mapstructure:"token_secret"`
-	MonitorWindow int    `mapstructure:"monitor_window"` // Duration in minutes, e.g. 20
+	Mode          TwitterMode `mapstructure:"mode"`         // Mode of operation: "api" or "scraper"
+	Username      string      `mapstructure:"username"`     // Twitter username
+	Password      string      `mapstructure:"password"`     // Twitter password
+	APIKey        string      `mapstructure:"api_key"`
+	APIKeySecret  string      `mapstructure:"api_key_secret"`
+	AccessToken   string      `mapstructure:"access_token"`
+	TokenSecret   string      `mapstructure:"token_secret"`
+	MonitorWindow int         `mapstructure:"monitor_window"` // Duration in minutes, e.g. 20
 }
 
 // TwitterClient represents a Twitter API client with authentication and user context
@@ -50,58 +61,53 @@ type TweetMetrics struct {
 	QuoteCount   int
 }
 
+// TwitterInterface defines the common interface for both API and Scraper clients
+type TwitterInterface interface {
+	GetMe() string
+	Tweet(ctx context.Context, text string) error
+	MonitorMentioned(ctx context.Context) ([]*Tweet, error)
+	ReplyToTweet(ctx context.Context, replyText, replyToTweetID string) (*Tweet, error)
+	DeleteTweet(ctx context.Context, tweetID string) error
+	GetTweetByID(ctx context.Context, tweetID string) (*Tweet, error)
+	MonitorHashtag(ctx context.Context, hashtag string, duration time.Duration) ([]*Tweet, error)
+}
+
 // NewTwitterClient creates a new Twitter client with the provided configuration
-func NewTwitterClient(twitterConfig *TwitterConfig) (*TwitterClient, error) {
+func NewTwitterClient(twitterConfig *TwitterConfig) (TwitterInterface, error) {
 	if err := validateConfig(twitterConfig); err != nil {
 		return nil, fmt.Errorf("invalid twitter config: %w", err)
 	}
 
-	in := &gotwi.NewClientInput{
-		AuthenticationMethod: gotwi.AuthenMethodOAuth1UserContext,
-		OAuthToken:           twitterConfig.AccessToken,
-		OAuthTokenSecret:     twitterConfig.TokenSecret,
-		APIKey:               twitterConfig.APIKey,
-		APIKeySecret:         twitterConfig.APIKeySecret,
+	switch twitterConfig.Mode {
+	case TwitterModeAPI:
+		return newTwitterAPIClient(twitterConfig)
+	case TwitterModeScraper:
+		return NewTwitterScraper(twitterConfig)
+	default:
+		return nil, fmt.Errorf("invalid twitter mode: %s", twitterConfig.Mode)
 	}
-
-	c, err := gotwi.NewClient(in)
-	if err != nil {
-		fmt.Println(err)
-		return nil, err
-	}
-
-	p := &types.GetMeInput{
-		Expansions: fields.ExpansionList{
-			fields.ExpansionPinnedTweetID,
-		},
-		UserFields: fields.UserFieldList{
-			fields.UserFieldCreatedAt,
-		},
-		TweetFields: fields.TweetFieldList{
-			fields.TweetFieldCreatedAt,
-		},
-	}
-
-	u, err := userlookup.GetMe(context.Background(), c, p)
-	if err != nil {
-		return nil, err
-	}
-
-	return &TwitterClient{
-		client: c,
-		user:   &u.Data,
-		tweets: u.Includes.Tweets,
-		config: twitterConfig,
-	}, nil
 }
 
 // validateConfig validates the Twitter configuration
 func validateConfig(config *TwitterConfig) error {
-	if config.APIKey == "" || config.APIKeySecret == "" {
-		return fmt.Errorf("TWITTER_API_KEY and TWITTER_API_KEY_SECRET are required")
+	if config.Mode == "" {
+		return fmt.Errorf("TWITTER_MODE must be specified (api or scraper)")
 	}
-	if config.AccessToken == "" || config.TokenSecret == "" {
-		return fmt.Errorf("TWITTER_ACCESS_TOKEN and TWITTER_TOKEN_SECRET are required")
+
+	switch config.Mode {
+	case TwitterModeAPI:
+		if config.APIKey == "" || config.APIKeySecret == "" {
+			return fmt.Errorf("TWITTER_API_KEY and TWITTER_API_KEY_SECRET are required for API mode")
+		}
+		if config.AccessToken == "" || config.TokenSecret == "" {
+			return fmt.Errorf("TWITTER_ACCESS_TOKEN and TWITTER_TOKEN_SECRET are required for API mode")
+		}
+	case TwitterModeScraper:
+		if config.Username == "" || config.Password == "" {
+			return fmt.Errorf("TWITTER_USERNAME and TWITTER_PASSWORD are required for scraper mode")
+		}
+	default:
+		return fmt.Errorf("invalid TWITTER_MODE: %s", config.Mode)
 	}
 	return nil
 }
@@ -258,4 +264,45 @@ func convertTweets(apiTweets []resources.Tweet) []*Tweet {
 		result = append(result, t)
 	}
 	return result
+}
+
+// Rename the existing NewTwitterClient to newTwitterAPIClient
+func newTwitterAPIClient(twitterConfig *TwitterConfig) (*TwitterClient, error) {
+	in := &gotwi.NewClientInput{
+		AuthenticationMethod: gotwi.AuthenMethodOAuth1UserContext,
+		OAuthToken:           twitterConfig.AccessToken,
+		OAuthTokenSecret:     twitterConfig.TokenSecret,
+		APIKey:               twitterConfig.APIKey,
+		APIKeySecret:         twitterConfig.APIKeySecret,
+	}
+
+	c, err := gotwi.NewClient(in)
+	if err != nil {
+		fmt.Println(err)
+		return nil, err
+	}
+
+	p := &types.GetMeInput{
+		Expansions: fields.ExpansionList{
+			fields.ExpansionPinnedTweetID,
+		},
+		UserFields: fields.UserFieldList{
+			fields.UserFieldCreatedAt,
+		},
+		TweetFields: fields.TweetFieldList{
+			fields.TweetFieldCreatedAt,
+		},
+	}
+
+	u, err := userlookup.GetMe(context.Background(), c, p)
+	if err != nil {
+		return nil, err
+	}
+
+	return &TwitterClient{
+		client: c,
+		user:   &u.Data,
+		tweets: u.Includes.Tweets,
+		config: twitterConfig,
+	}, nil
 }
