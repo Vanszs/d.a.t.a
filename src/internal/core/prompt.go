@@ -21,7 +21,12 @@ func getGeneralInfo(systemState *SystemState) string {
 	### **Available Tools**
 	The following tools are available to the AI Agent:
 	%s
-	Each tool has specific capabilities. When generating response, consider how these tools can be leveraged. You shouldn't create tasks that can't be fullfilled by the given tools.`,
+	Each tool has specific capabilities. When generating response, consider how these tools can be leveraged. You shouldn't create tasks that can't be fullfilled by the given tools.
+	
+	Here are some constraints:
+	### **Constraints**
+	%s
+	`,
 		systemState.Character.Name,
 		systemState.Character.System,
 		convertGoalsToString(systemState.AgentStates.Goals),
@@ -29,6 +34,7 @@ func getGeneralInfo(systemState *SystemState) string {
 		strings.Join(systemState.Character.Lore, "\n"),
 		formatMap(systemState.StakeholderPreferences),
 		formatTools(systemState.AvailableTools),
+		strings.Join(systemState.Character.Style.Constraints, "\n"),
 	)
 }
 
@@ -473,32 +479,40 @@ func formatTools(tools []Tool) string {
 func buildMessagePrompt(state *SystemState, msg *SocialMessage, stakeholder *Stakeholder) string {
 	var priorityAccountInfo string
 	if stakeholder.Type == StakeholderTypePriority {
-		priorityAccountInfo = "IMPORTANT! This is a priority account. The input from this account should be more important and require immediate attention."
+		priorityAccountInfo = "IMPORTANT! This user is a priority account. The input from this account should be more important and require immediate attention."
 	}
 
 	var tokenBalanceInfo string
 	if state.NativeTokenInfo != nil {
-		tokenBalanceInfo += fmt.Sprintf("You have a native token with ticker %s on network %s. You should encourage people to hold your token to increase the value of your network. \n", state.NativeTokenInfo.Ticker, state.NativeTokenInfo.Network)
+		tokenBalanceInfo = buildTokenBalanceInfo(state.NativeTokenInfo)
 	}
 	if stakeholder.TokenBalance != nil {
-		tokenBalanceInfo += fmt.Sprintf("This stakeholder is holding %f of your native token. Given the stakeholder is holding your token, the interest of the stakeholder is aligned with you. You need to take the input more seriously", stakeholder.TokenBalance.Balance)
+		tokenBalanceInfo += fmt.Sprintf("This user is holding %f of your native token. Given the stakeholder is holding your token, the interest of the stakeholder is aligned with you. You need to take the input more seriously", stakeholder.TokenBalance.Balance)
 	}
 
 	// Create a prompt that explains all the possible types and asks for structured analysis
 	return fmt.Sprintf(`
-%s
 You received this user message from %s. You should analysis the message and return a JSON object with specific fields.
 Available Intent Types: question, feedback, complaint, suggestion, greeting, inquiry, request, acknowledge
 Available Entity Types: person, product, company, location, datetime, crypto, wallet, contract
 Available Emotion Types: positive, negative, neutral
 
-For the message input from the user: "%s"
+The message from the user: "%s"
 
 Historical messages and context from this user: %s
 
 %s
 
 %s
+
+If you want to generate the reply, you should mainly focus on the message input from the user and only use the historical messages for context.
+The reply message tone should be: %s
+
+If you want to generate actions, you should only consider the below available actions:
+
+%s
+
+The name and type should be exactly the same as the action name and type in the available actions.
 
 Please analyze the message and provide the following information:
 
@@ -507,24 +521,77 @@ Return a JSON object with these fields:
 	"intent": "one of the intent types",
 	"entity": "one of the entity types",
 	"emotion": "one of the emotion types",
-	"confidence": confidence score between 0 and 1,
-	"should_reply": boolean indicating if a reply is needed,
+	"confidence": "confidence score between 0 and 1",
+	"should_reply": "boolean indicating if a reply is needed",
 	"response_msg": "appropriate response message if should_reply is true",
-	"should_generate_task": boolean indicating if this requires task creation,
-	"should_generate_action": boolean indicating if this requires action generation
+	"should_generate_action": "boolean indicating if this requires action generation",
+	"actions": list of actions to be executed if should_generate_action is true, should be a json array of action types and names, the format should be [{"action_type": "action type", "action_name": "action name"}]"
 }
-
-If you want to generate the reply, you should mainly focus on the message input from the user and only use the historical messages for context.
-The reply message tone should be: %s
-
-If should generate task is true, you don't need user inputs and you can simply generate a task based on the goal of the agent.
-
-If you want to generate a task, you should mainly focus on the message input from the priority account or user who is holding your token.
-`, getGeneralInfo(state), msg.Platform, strings.Join(stakeholder.HistoricalMsgs, ";"), priorityAccountInfo, tokenBalanceInfo, msg.Content, strings.Join(state.Character.Style.Tone, ", "))
+`,
+		msg.Platform,
+		msg.Content,
+		strings.Join(stakeholder.HistoricalMsgs, ";"),
+		priorityAccountInfo,
+		tokenBalanceInfo,
+		strings.Join(state.Character.Style.Tone, ", "),
+		formatActions(state.AvailableActions),
+	)
 }
 
 func buildSystemPrompt(state *SystemState) string {
 	return fmt.Sprintf(`
    %s
 	`, getGeneralInfo(state))
+}
+
+func formatActions(actions []actions.IAction) string {
+	var result string
+	for _, action := range actions {
+		result += fmt.Sprintf("- {Action Type: %s, Action Name: %s, Action Description: %s}\n", action.Type(), action.Name(), action.Description())
+	}
+	return result
+}
+
+func generateActionParametersPrompt(state *SystemState, msg *SocialMessage, stakeholder *Stakeholder, action actions.IAction) string {
+	// Create a prompt that explains all the possible types and asks for structured analysis
+	return fmt.Sprintf(`
+You received this user message from %s.
+
+The message from the user: "%s"
+
+Historical messages and context from this user: %s
+
+You decided to take the following action: %s
+
+The description of the action is: %s
+
+You need to generate the input parameters for the action.
+
+Please generate the input parameters for the action in the JSON format:
+
+The required input parameters are:
+%s
+
+You can only generate the input parameters for the action in json, or return the result with the following json format if you need more info from the user:
+{
+	"more_info_needed": true,
+	"rely_message": "the message that you need to rely on to generate the input parameters"
+}
+`,
+		msg.Platform,
+		msg.Content,
+		strings.Join(stakeholder.HistoricalMsgs, ";"),
+		action.Name(),
+		action.Description(),
+		action.ParametersPrompt(),
+	)
+}
+
+func buildTokenBalanceInfo(nativeTokenInfo *TokenInfo) string {
+	return fmt.Sprintf(
+		"You have a native token with ticker %s and address %s on network %s. You should encourage people to hold your token to increase the value of your network. \n",
+		nativeTokenInfo.Ticker,
+		nativeTokenInfo.ContractAddr,
+		nativeTokenInfo.Network,
+	)
 }

@@ -22,6 +22,8 @@ import (
 	"github.com/carv-protocol/d.a.t.a/src/pkg/database/adapters"
 	"github.com/carv-protocol/d.a.t.a/src/pkg/llm"
 	customTools "github.com/carv-protocol/d.a.t.a/src/tools"
+	data "github.com/carv-protocol/d.a.t.a/src/tools/d.a.t.a"
+	"github.com/carv-protocol/d.a.t.a/src/tools/wallet"
 
 	"github.com/google/uuid"
 )
@@ -73,8 +75,9 @@ func initializeAgent(ctx context.Context, config *Config) (*core.Agent, error) {
 	carvClient := carv.NewClient(config.Data.CarvConfig.APIKey, config.Data.CarvConfig.BaseURL)
 	memoryManager := memory.NewManager(store)
 	tokenManager := token.NewTokenManager(carvClient, &core.TokenInfo{
-		Network: config.Token.Network,
-		Ticker:  config.Token.Ticker,
+		Network:      config.Token.Network,
+		Ticker:       config.Token.Ticker,
+		ContractAddr: config.Token.ContractAddr,
 	})
 	stakeholderManager := token.NewStakeholderManager(memoryManager)
 
@@ -85,20 +88,20 @@ func initializeAgent(ctx context.Context, config *Config) (*core.Agent, error) {
 	}
 
 	// Initialize tools
-	toolsManager := initializeTools()
+	toolsManager := initializeTools(config)
 
 	// Initialize action manager and register actions
 	actionManager := actions.NewManager()
-	dbProvider := actions.NewDatabaseProvider(
-		config.Data.CarvConfig.BaseURL,
-		config.Data.CarvConfig.APIKey,
-		config.Token.Network,
-		llmClient,
-	)
-	fetchAction := actions.NewFetchTransactionAction(dbProvider)
-	if err := actionManager.Register(fetchAction); err != nil {
-		return nil, fmt.Errorf("failed to register fetch transaction action: %w", err)
-	}
+	// dbProvider := actions.NewDatabaseProvider(
+	// 	config.Data.CarvConfig.BaseURL,
+	// 	config.Data.CarvConfig.APIKey,
+	// 	config.Token.Network,
+	// 	llmClient,
+	// )
+	// fetchAction := actions.NewFetchTransactionAction(dbProvider)
+	// if err := actionManager.Register(fetchAction); err != nil {
+	// 	return nil, fmt.Errorf("failed to register fetch transaction action: %w", err)
+	// }
 
 	// Create agent
 	agentConfig := core.AgentConfig{
@@ -126,11 +129,17 @@ func initializeAgent(ctx context.Context, config *Config) (*core.Agent, error) {
 	return agent, nil
 }
 
-func initializeTools() *tools.Manager {
+func initializeTools(config *Config) *tools.Manager {
+
+	walletTool, err := wallet.NewWalletTool(&config.Wallet)
+	if err != nil {
+		log.Fatalf("Failed to create wallet tool: %v", err)
+	}
+
 	toolsManager := tools.NewManager()
 	toolsManager.Register(&customTools.TwitterTool{})
-	toolsManager.Register(&customTools.CARVDataTool{})
-	toolsManager.Register(&customTools.WalletTool{})
+	toolsManager.Register(&data.CARVDataTool{})
+	toolsManager.Register(walletTool)
 	return toolsManager
 }
 

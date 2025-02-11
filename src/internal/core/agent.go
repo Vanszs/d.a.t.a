@@ -10,7 +10,6 @@ import (
 
 	"github.com/carv-protocol/d.a.t.a/src/characters"
 	"github.com/carv-protocol/d.a.t.a/src/internal/actions"
-	"github.com/carv-protocol/d.a.t.a/src/pkg/utils"
 
 	"github.com/google/uuid"
 	"go.uber.org/zap"
@@ -173,7 +172,7 @@ func (a *Agent) getCurrentState() *SystemState {
 	return &SystemState{
 		Character:              a.character,
 		AvailableTools:         a.toolManager.AvailableTools(),
-		AvailableActions:       a.actionManager.GetAvailableActions(),
+		AvailableActions:       a.toolManager.AvailableActions(),
 		Timestamp:              time.Now(),
 		AgentStates:            a.GetState(),
 		StakeholderPreferences: pref,
@@ -198,65 +197,65 @@ func (a *Agent) monitorSocialInputs() {
 }
 
 // executeAction executes a generic action
-func (a *Agent) executeAction(ctx context.Context, action actions.IAction) error {
+func (a *Agent) executeAction(ctx context.Context, action actions.IAction, params map[string]interface{}) error {
 	a.logger.Infow("Executing action", "type", action.Type())
-	return action.Execute()
+	return action.Execute(ctx, params)
 }
 
 // executeActionWithResponse executes an action that returns a response
 func (a *Agent) executeActionWithResponse(ctx context.Context, action actions.IAction, msg *SocialMessage, processedMsg *ProcessedMessage) error {
-	a.logger.Infow("Executing action with response", "type", action.Type())
+	// a.logger.Infow("Executing action with response", "type", action.Type())
 
-	// Try to cast to FetchTransactionAction
-	if fetchAction, ok := action.(*actions.FetchTransactionAction); ok {
-		return a.executeFetchTransactionAction(ctx, fetchAction, msg, processedMsg)
-	}
+	// // Try to cast to FetchTransactionAction
+	// if fetchAction, ok := action.(*actions.FetchTransactionAction); ok {
+	// 	return a.executeFetchTransactionAction(ctx, fetchAction, msg, processedMsg)
+	// }
 
 	// Handle other action types here
 	return fmt.Errorf("unsupported action type: %s", action.Type())
 }
 
 // executeFetchTransactionAction handles the fetch transaction action specifically
-func (a *Agent) executeFetchTransactionAction(ctx context.Context, action *actions.FetchTransactionAction, msg *SocialMessage, processedMsg *ProcessedMessage) error {
-	// Generate SQL query
-	query, err := action.GenerateQuery(ctx, msg.Content)
-	if err != nil {
-		a.logger.Errorw("Error generating SQL query", "error", err)
-		return err
-	}
+// func (a *Agent) executeFetchTransactionAction(ctx context.Context, action *actions.FetchTransactionAction, msg *SocialMessage, processedMsg *ProcessedMessage) error {
+// 	// Generate SQL query
+// 	query, err := action.GenerateQuery(ctx, msg.Content)
+// 	if err != nil {
+// 		a.logger.Errorw("Error generating SQL query", "error", err)
+// 		return err
+// 	}
 
-	// Execute the query
-	params := actions.FetchTransactionParams{
-		Limit: utils.IntPtr(10), // Default limit to 10 results
-	}
-	result, err := action.ExecuteWithParams(ctx, query, params)
-	if err != nil {
-		a.logger.Errorw("Error executing query", "error", err)
-		return err
-	}
+// 	// Execute the query
+// 	params := actions.FetchTransactionParams{
+// 		Limit: utils.IntPtr(10), // Default limit to 10 results
+// 	}
+// 	result, err := action.ExecuteWithParams(ctx, query, params)
+// 	if err != nil {
+// 		a.logger.Errorw("Error executing query", "error", err)
+// 		return err
+// 	}
 
-	// Build response content
-	responseContent := a.buildQueryResponse(processedMsg.ResponseMsg, result)
+// 	// Build response content
+// 	responseContent := a.buildQueryResponse(processedMsg.ResponseMsg, result)
 
-	// Send response
-	return a.socialClient.SendMessage(ctx, SocialMessage{
-		Platform: msg.Platform,
-		Type:     "Response",
-		Content:  responseContent,
-		Metadata: msg.Metadata,
-	})
-}
+// 	// Send response
+// 	return a.socialClient.SendMessage(ctx, SocialMessage{
+// 		Platform: msg.Platform,
+// 		Type:     "Response",
+// 		Content:  responseContent,
+// 		Metadata: msg.Metadata,
+// 	})
+// }
 
 // buildQueryResponse builds the response content based on query results
-func (a *Agent) buildQueryResponse(defaultResponse string, result *actions.TransactionQueryResult) string {
-	if result != nil && result.Success {
-		if result.Analysis != "" {
-			return result.Analysis
-		}
-		return fmt.Sprintf("\n\nQuery Results:\n%s", actions.FormatQueryResult(result))
-	}
-	return defaultResponse
-}
+// func (a *Agent) buildQueryResponse(defaultResponse string, result *actions.TransactionQueryResult) string {
+// 	if result != nil && result.Success {
+// 		if result.Analysis != "" {
+// 			return result.Analysis
+// 		}
+// 		return fmt.Sprintf("\n\nQuery Results:\n%s", actions.FormatQueryResult(result))
+// 	}
+// 	return defaultResponse
+// }
 
 func (a *Agent) processMessage(msg *SocialMessage) error {
 	state := a.getCurrentState()
@@ -286,6 +285,34 @@ func (a *Agent) processMessage(msg *SocialMessage) error {
 		return err
 	}
 
+	if processedMsg.ShouldGenerateAction {
+		for _, action := range processedMsg.Actions {
+			action, err := a.toolManager.GetAction(action.ActionType, action.ActionName)
+			if err != nil {
+				a.logger.Errorw("Error getting action", "error", err)
+				return err
+			}
+
+			params, err := a.cognitive.generateActionParameters(a.ctx, state, msg, stakeholder, action)
+			if err != nil {
+				a.logger.Errorw("Error generating action parameters", "error", err)
+				return err
+			}
+
+			if moreInfoNeeded, ok := params["more_info_needed"].(bool); ok && moreInfoNeeded {
+				a.logger.Infof("More info needed, relying on message: %s", params["rely_message"])
+				processedMsg.ResponseMsg = params["rely_message"].(string)
+				processedMsg.ShouldReply = true
+				continue
+			}
+
+			if err = a.executeAction(a.ctx, action, params); err != nil {
+				a.logger.Errorw("Error executing action", "error", err)
+				return err
+			}
+		}
+	}
+
 	a.logger.Infof("Processed message: %+v", processedMsg)
 	err = a.stakeholders.AddHistoricalMsg(
 		a.ctx,
@@ -302,25 +329,6 @@ func (a *Agent) processMessage(msg *SocialMessage) error {
 	}
 
 	if processedMsg.ShouldReply {
-		// Generate SQL query if needed
-		if processedMsg.ShouldGenerateAction {
-			// Get the fetch transaction action
-			action := a.actionManager.GetAction("fetch_transactions")
-			if action != nil {
-				if err := a.executeActionWithResponse(a.ctx, action, msg, processedMsg); err != nil {
-					a.logger.Errorw("Error executing action", "error", err)
-					// Send original response on error
-					a.socialClient.SendMessage(a.ctx, SocialMessage{
-						Platform: msg.Platform,
-						Type:     "Response",
-						Content:  processedMsg.ResponseMsg,
-						Metadata: msg.Metadata,
-					})
-				}
-				return nil
-			}
-		}
-
 		// If we didn't send a response with analysis, send the original response
 		a.socialClient.SendMessage(a.ctx, SocialMessage{
 			Platform: msg.Platform,
@@ -330,9 +338,9 @@ func (a *Agent) processMessage(msg *SocialMessage) error {
 		})
 	}
 
-	if processedMsg.ShouldGenerateTask && stakeholder.Type == StakeholderTypePriority {
-		a.evaluateAndExecuteTasks()
-	}
+	// if processedMsg.ShouldGenerateTask && stakeholder.Type == StakeholderTypePriority {
+	// 	a.evaluateAndExecuteTasks()
+	// }
 
 	return nil
 }
@@ -389,18 +397,18 @@ func (a *Agent) ExecuteTask(ctx context.Context, task *Task, state *SystemState)
 
 	// Execute actions with continuous verification
 	var results []error
-	for _, action := range actionGen.Actions {
-		// Execute action
-		err := a.executeAction(ctx, action)
-		results = append(results, err)
+	// for _, action := range actionGen.Actions {
+	// Execute action
+	// err := a.executeAction(ctx, action)
+	// results = append(results, err)
 
-		// results = append(results, result)
+	// results = append(results, result)
 
-		// Update stakeholders on significant progress
-		// if a.isSignificantProgress(result) {
-		// 	a.notifyStakeholders(ctx, task, result)
-		// }
-	}
+	// Update stakeholders on significant progress
+	// if a.isSignificantProgress(result) {
+	// 	a.notifyStakeholders(ctx, task, result)
+	// }
+	// }
 
 	return &TaskResult{
 		TaskID:    task.ID,

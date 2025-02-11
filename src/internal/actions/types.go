@@ -1,13 +1,18 @@
 package actions
 
-import "time"
+import (
+	"context"
+	"time"
+)
 
 // IAction is an interface for actions that can be executed by the agent
 type IAction interface {
 	Name() string
 	Description() string
-	Execute() error
+	Execute(ctx context.Context, params map[string]interface{}) error
 	Type() string
+	Validate(params map[string]interface{}) error
+	ParametersPrompt() string
 }
 
 // ActionManager is an interface for managing actions
