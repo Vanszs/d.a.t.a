@@ -17,7 +17,6 @@ import (
 	searchTypes "github.com/michimani/gotwi/tweet/searchtweet/types"
 )
 
-// TwitterMode defines the mode of Twitter client operation
 type TwitterMode string
 
 const (
@@ -25,43 +24,11 @@ const (
 	TwitterModeScraper TwitterMode = "scraper"
 )
 
-type TwitterConfig struct {
-	Mode          TwitterMode `mapstructure:"mode"`         // Mode of operation: "api" or "scraper"
-	Username      string      `mapstructure:"username"`     // Twitter username
-	Password      string      `mapstructure:"password"`     // Twitter password
-	APIKey        string      `mapstructure:"api_key"`
-	APIKeySecret  string      `mapstructure:"api_key_secret"`
-	AccessToken   string      `mapstructure:"access_token"`
-	TokenSecret   string      `mapstructure:"token_secret"`
-	MonitorWindow int         `mapstructure:"monitor_window"` // Duration in minutes, e.g. 20
-}
-
-// TwitterClient represents a Twitter API client with authentication and user context
 type TwitterClient struct {
-	client *gotwi.Client
-	user   *resources.User
-	tweets []resources.Tweet
-	config *TwitterConfig // Add config field for future reference
+	Twitter TwitterInterface
 }
 
-// Tweet represents a simplified Twitter post structure
-type Tweet struct {
-	ID        string
-	Text      string
-	UserID    string
-	CreatedAt time.Time     // Add creation time
-	Metrics   *TweetMetrics // Add metrics
-}
-
-// TweetMetrics contains engagement metrics for a tweet
-type TweetMetrics struct {
-	LikeCount    int
-	RetweetCount int
-	ReplyCount   int
-	QuoteCount   int
-}
-
-// TwitterInterface defines the common interface for both API and Scraper clients
+// Interface defines the common interface for both API and Scraper clients
 type TwitterInterface interface {
 	GetMe() string
 	Tweet(ctx context.Context, text string) error
@@ -72,17 +39,64 @@ type TwitterInterface interface {
 	MonitorHashtag(ctx context.Context, hashtag string, duration time.Duration) ([]*Tweet, error)
 }
 
+// Tweet represents a simplified Twitter post structure
+type Tweet struct {
+	ID        string
+	Text      string
+	UserID    string
+	CreatedAt time.Time
+	Metrics   *TweetMetrics
+}
+
+// TweetMetrics contains engagement metrics for a tweet
+type TweetMetrics struct {
+	LikeCount    int
+	RetweetCount int
+	ReplyCount   int
+	QuoteCount   int
+}
+
+type TwitterConfig struct {
+	Mode          TwitterMode `mapstructure:"mode"`     // Mode of operation: "api" or "scraper"
+	Username      string      `mapstructure:"username"` // Twitter username
+	Password      string      `mapstructure:"password"` // Twitter password
+	APIKey        string      `mapstructure:"api_key"`
+	APIKeySecret  string      `mapstructure:"api_key_secret"`
+	AccessToken   string      `mapstructure:"access_token"`
+	TokenSecret   string      `mapstructure:"token_secret"`
+	MonitorWindow int         `mapstructure:"monitor_window"` // Duration in minutes, e.g. 20
+}
+
+// TwitterOauth represents a Twitter API client with authentication and user context
+type TwitterOauth struct {
+	client *gotwi.Client
+	user   *resources.User
+	tweets []resources.Tweet
+	config *TwitterConfig // Add config field for future reference
+}
+
 // NewTwitterClient creates a new Twitter client with the provided configuration
-func NewTwitterClient(twitterConfig *TwitterConfig) (TwitterInterface, error) {
+func NewTwitterClient(twitterConfig *TwitterConfig) (*TwitterClient, error) {
+	if twitterConfig == nil {
+		return nil, fmt.Errorf("twitter config is nil")
+	}
 	if err := validateConfig(twitterConfig); err != nil {
 		return nil, fmt.Errorf("invalid twitter config: %w", err)
 	}
 
 	switch twitterConfig.Mode {
 	case TwitterModeAPI:
-		return newTwitterAPIClient(twitterConfig)
+		oauth, err := newTwitterAPIClient(twitterConfig)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create twitter oauth client: %w", err)
+		}
+		return &TwitterClient{Twitter: oauth}, nil
 	case TwitterModeScraper:
-		return NewTwitterScraper(twitterConfig)
+		scraper, err := newTwitterScraper(twitterConfig)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create twitter scraper: %w", err)
+		}
+		return &TwitterClient{Twitter: scraper}, nil
 	default:
 		return nil, fmt.Errorf("invalid twitter mode: %s", twitterConfig.Mode)
 	}
@@ -113,7 +127,7 @@ func validateConfig(config *TwitterConfig) error {
 }
 
 // MonitorMentioned monitors mentions of the authenticated user
-func (t *TwitterClient) MonitorMentioned(ctx context.Context) ([]*Tweet, error) {
+func (t *TwitterOauth) MonitorMentioned(ctx context.Context) ([]*Tweet, error) {
 	// Use configured monitor window, default to 20 minutes if not set
 	// Note:Do not quickly check the tweets, because maybe the twitter api is rate limited
 	monitorWindow := t.config.MonitorWindow
@@ -167,11 +181,11 @@ func (t *TwitterClient) MonitorMentioned(ctx context.Context) ([]*Tweet, error) 
 	return result, nil
 }
 
-func (t *TwitterClient) GetMe() string {
+func (t *TwitterOauth) GetMe() string {
 	return *t.user.ID
 }
 
-func (t *TwitterClient) Tweet(ctx context.Context, tweet string) error {
+func (t *TwitterOauth) Tweet(ctx context.Context, tweet string) error {
 	p := &manageTypes.CreateInput{
 		Text: gotwi.String(tweet),
 	}
@@ -185,7 +199,7 @@ func (t *TwitterClient) Tweet(ctx context.Context, tweet string) error {
 }
 
 // ReplyToTweet replies to a specific tweet
-func (t *TwitterClient) ReplyToTweet(ctx context.Context, replyText, replyToTweetID string) (*Tweet, error) {
+func (t *TwitterOauth) ReplyToTweet(ctx context.Context, replyText, replyToTweetID string) (*Tweet, error) {
 	p := &manageTypes.CreateInput{
 		Text: gotwi.String(replyText),
 		Reply: &manageTypes.CreateInputReply{
@@ -206,14 +220,14 @@ func (t *TwitterClient) ReplyToTweet(ctx context.Context, replyText, replyToTwee
 }
 
 // GetTweetByID retrieves a specific tweet by its ID
-func (t *TwitterClient) GetTweetByID(ctx context.Context, tweetID string) (*Tweet, error) {
+func (t *TwitterOauth) GetTweetByID(ctx context.Context, tweetID string) (*Tweet, error) {
 	// Implementation for getting a specific tweet
 	// TODO: Implement using gotwi library
 	return nil, nil
 }
 
 // DeleteTweet deletes a tweet by its ID
-func (t *TwitterClient) DeleteTweet(ctx context.Context, tweetID string) error {
+func (t *TwitterOauth) DeleteTweet(ctx context.Context, tweetID string) error {
 	p := &manageTypes.DeleteInput{
 		ID: tweetID,
 	}
@@ -227,13 +241,13 @@ func (t *TwitterClient) DeleteTweet(ctx context.Context, tweetID string) error {
 }
 
 // LikeTweet likes a specific tweet
-func (t *TwitterClient) LikeTweet(ctx context.Context, tweetID string) error {
+func (t *TwitterOauth) LikeTweet(ctx context.Context, tweetID string) error {
 	// TODO: Implement using gotwi library
 	return nil
 }
 
 // MonitorHashtag monitors tweets containing specific hashtags
-func (t *TwitterClient) MonitorHashtag(ctx context.Context, hashtag string, duration time.Duration) ([]*Tweet, error) {
+func (t *TwitterOauth) MonitorHashtag(ctx context.Context, hashtag string, duration time.Duration) ([]*Tweet, error) {
 	startTime := time.Now().Add(-duration)
 	l := &searchTypes.ListRecentInput{
 		StartTime: &startTime,
@@ -267,7 +281,7 @@ func convertTweets(apiTweets []resources.Tweet) []*Tweet {
 }
 
 // Rename the existing NewTwitterClient to newTwitterAPIClient
-func newTwitterAPIClient(twitterConfig *TwitterConfig) (*TwitterClient, error) {
+func newTwitterAPIClient(twitterConfig *TwitterConfig) (*TwitterOauth, error) {
 	in := &gotwi.NewClientInput{
 		AuthenticationMethod: gotwi.AuthenMethodOAuth1UserContext,
 		OAuthToken:           twitterConfig.AccessToken,
@@ -299,7 +313,7 @@ func newTwitterAPIClient(twitterConfig *TwitterConfig) (*TwitterClient, error) {
 		return nil, err
 	}
 
-	return &TwitterClient{
+	return &TwitterOauth{
 		client: c,
 		user:   &u.Data,
 		tweets: u.Includes.Tweets,

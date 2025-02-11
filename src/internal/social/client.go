@@ -12,7 +12,7 @@ import (
 
 // SocialClientImpl handles social media interactions and error reporting
 type SocialClientImpl struct {
-	twitterClient    clients.TwitterInterface
+	twitterClient    *clients.TwitterClient
 	discordBot       *clients.DiscordBot
 	telegramBot      *clients.TelegramClient
 	socialMsgChannel chan core.SocialMessage
@@ -53,7 +53,7 @@ func NewSocialClient(
 func (sc *SocialClientImpl) SendMessage(ctx context.Context, msg core.SocialMessage) error {
 	switch msg.Platform {
 	case "twitter":
-		return sc.twitterClient.Tweet(ctx, msg.Content)
+		return sc.twitterClient.Twitter.Tweet(ctx, msg.Content)
 	case "discord":
 		return sc.discordBot.SendMessage(ctx, &clients.DiscordMsg{
 			AuthorID:  msg.FromUser,
@@ -67,7 +67,7 @@ func (sc *SocialClientImpl) SendMessage(ctx context.Context, msg core.SocialMess
 		var errs []error
 
 		if sc.twitterClient != nil {
-			if err := sc.twitterClient.Tweet(context.Background(), msg.Content); err != nil {
+			if err := sc.twitterClient.Twitter.Tweet(context.Background(), msg.Content); err != nil {
 				errs = append(errs, fmt.Errorf("twitter: %w", err))
 			}
 		}
@@ -147,7 +147,7 @@ func (sc *SocialClientImpl) monitorTwitter(ctx context.Context) {
 	for {
 		select {
 		case <-ticker.C:
-			tweets, err := sc.twitterClient.MonitorMentioned(context.Background())
+			tweets, err := sc.twitterClient.Twitter.MonitorMentioned(context.Background())
 			if err != nil {
 				// Report error through channel and continue monitoring
 				select {
@@ -167,7 +167,7 @@ func (sc *SocialClientImpl) monitorTwitter(ctx context.Context) {
 					Content:     tweet.Text,
 					Platform:    "twitter",
 					FromUser:    tweet.UserID,
-					TargetUsers: []string{sc.twitterClient.GetMe()},
+					TargetUsers: []string{sc.twitterClient.Twitter.GetMe()},
 				}
 			}
 		case <-ctx.Done():

@@ -16,7 +16,7 @@ type TwitterScraper struct {
 }
 
 // NewTwitterScraper creates a new Twitter scraper with improved error handling and validation
-func NewTwitterScraper(config *TwitterConfig) (*TwitterScraper, error) {
+func newTwitterScraper(config *TwitterConfig) (*TwitterScraper, error) {
 	// Validate config
 	if err := validateConfig(config); err != nil {
 		return nil, fmt.Errorf("invalid twitter config: %w", err)
