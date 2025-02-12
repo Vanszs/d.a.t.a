@@ -12,7 +12,7 @@ import (
 
 // SocialClientImpl handles social media interactions and error reporting
 type SocialClientImpl struct {
-	twitterClient    clients.TwitterInterface
+	twitterClient    clients.ITwitter
 	discordBot       *clients.DiscordBot
 	telegramBot      *clients.TelegramClient
 	socialMsgChannel chan core.SocialMessage
