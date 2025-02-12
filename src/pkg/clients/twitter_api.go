@@ -24,12 +24,8 @@ const (
 	TwitterModeScraper TwitterMode = "scraper"
 )
 
-type TwitterClient struct {
-	Twitter TwitterInterface
-}
-
-// Interface defines the common interface for both API and Scraper clients
-type TwitterInterface interface {
+// Interface defines the contract
+type ITwitter interface {
 	GetMe() string
 	Tweet(ctx context.Context, text string) error
 	MonitorMentioned(ctx context.Context) ([]*Tweet, error)
@@ -75,8 +71,8 @@ type TwitterOauth struct {
 	config *TwitterConfig // Add config field for future reference
 }
 
-// NewTwitterClient creates a new Twitter client with the provided configuration
-func NewTwitterClient(twitterConfig *TwitterConfig) (*TwitterClient, error) {
+// NewTwitterClient returns the interface type
+func NewTwitterClient(twitterConfig *TwitterConfig) (ITwitter, error) {
 	if twitterConfig == nil {
 		return nil, fmt.Errorf("twitter config is nil")
 	}
@@ -84,19 +80,12 @@ func NewTwitterClient(twitterConfig *TwitterConfig) (*TwitterClient, error) {
 		return nil, fmt.Errorf("invalid twitter config: %w", err)
 	}
 
+	// Returns concrete implementations (TwitterOauth/TwitterScraper) as ITwitter
 	switch twitterConfig.Mode {
 	case TwitterModeAPI:
-		oauth, err := newTwitterAPIClient(twitterConfig)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create twitter oauth client: %w", err)
-		}
-		return &TwitterClient{Twitter: oauth}, nil
+		return newTwitterAPIClient(twitterConfig) // Returns *TwitterOauth
 	case TwitterModeScraper:
-		scraper, err := newTwitterScraper(twitterConfig)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create twitter scraper: %w", err)
-		}
-		return &TwitterClient{Twitter: scraper}, nil
+		return newTwitterScraper(twitterConfig) // Returns *TwitterScraper
 	default:
 		return nil, fmt.Errorf("invalid twitter mode: %s", twitterConfig.Mode)
 	}
