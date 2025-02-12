@@ -10,7 +10,7 @@ database:
 
 llm_config:
   # LLM provider: "openai", "deepseek", etc.
-  provider: "deepseek"
+  provider: "openai"
   # API key for the LLM provider
   api_key: ""
   # Base URL for API calls
@@ -25,6 +25,17 @@ data:
     # API key for CarvID
     api_key: "your-carvid-api-key-here"
 
+wallet:
+  # Private key for the wallet
+  private_key: "your-private-key-here"
+  # Network: "base" or "ethereum"
+  network: "base"
+  # RPC URL
+  rpc_url: "https://base.llamarpc.com"
+  chain_id: 8453
+  timeout: 30s
+
 token:
   network: "base"
   ticker: "carv"
+  contract_addr: "0xc08cd26474722ce93f4d0c34d16201461c10aa8c"

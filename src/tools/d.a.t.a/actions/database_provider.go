@@ -12,6 +12,7 @@ import (
 
 	"github.com/carv-protocol/d.a.t.a/src/pkg/llm"
 	"github.com/carv-protocol/d.a.t.a/src/pkg/logger"
+
 	"go.uber.org/zap"
 )
 

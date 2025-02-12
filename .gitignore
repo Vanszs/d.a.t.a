@@ -3,7 +3,6 @@ d.a.t.a_code.go
 src/.env
 .env
 d.a.t.a.json
-src/config/config.yaml
 
 .cursorrules
 .cursorignore
@@ -13,4 +12,4 @@ src/config/config.yaml
 
 config
 main
-data.db
+data/data.db

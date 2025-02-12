@@ -99,6 +99,8 @@ type Tool interface {
 type ToolManager interface {
 	Register(tool Tool) error
 	AvailableTools() []Tool
+	AvailableActions() []actions.IAction
+	GetAction(actionType string, actionName string) (actions.IAction, error)
 }
 
 // IntentType defines different types of intents
@@ -138,16 +140,21 @@ const (
 	EmotionNeutral  EmotionType = "neutral"
 )
 
+type ProcessedAction struct {
+	ActionType string `json:"action_type"`
+	ActionName string `json:"action_name"`
+}
+
 // ProcessedMessage is a struct for processed messages
 type ProcessedMessage struct {
-	Intent               IntentType  `json:"intent"`
-	Entity               EntityType  `json:"entity"`
-	Emotion              EmotionType `json:"emotion"`
-	Confidence           float64     `json:"confidence"`
-	ShouldReply          bool        `json:"should_reply"`
-	ResponseMsg          string      `json:"response_msg"`
-	ShouldGenerateTask   bool        `json:"should_generate_task"`
-	ShouldGenerateAction bool        `json:"should_generate_action"`
+	Intent               IntentType        `json:"intent"`
+	Entity               EntityType        `json:"entity"`
+	Emotion              EmotionType       `json:"emotion"`
+	Confidence           float64           `json:"confidence"`
+	ShouldReply          bool              `json:"should_reply"`
+	ResponseMsg          string            `json:"response_msg"`
+	ShouldGenerateAction bool              `json:"should_generate_action"`
+	Actions              []ProcessedAction `json:"actions"`
 }
 
 // SocialMessage is a struct for social messages

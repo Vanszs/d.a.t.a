@@ -7,6 +7,7 @@ import (
 	"github.com/carv-protocol/d.a.t.a/src/pkg/carv"
 	"github.com/carv-protocol/d.a.t.a/src/pkg/clients"
 	"github.com/carv-protocol/d.a.t.a/src/pkg/llm"
+	"github.com/carv-protocol/d.a.t.a/src/tools/wallet"
 	"github.com/spf13/viper"
 )
 
@@ -37,9 +38,12 @@ type Config struct {
 	} `mapstructure:"social"`
 
 	Token struct {
-		Network string `mapstructure:"network"`
-		Ticker  string `mapstructure:"ticker"`
+		Network      string `mapstructure:"network"`
+		Ticker       string `mapstructure:"ticker"`
+		ContractAddr string `mapstructure:"contract_addr"`
 	} `mapstructure:"token"`
+
+	Wallet wallet.Config `mapstructure:"wallet"`
 }
 
 func setDefaultConfig() {
@@ -74,6 +78,7 @@ func loadEnvConfig() error {
 		"TELEGRAM_BOT_TOKEN":     "social.telegram.bot_token",
 		"CARV_DATA_BASE_URL":     "data.carv.base_url",
 		"CARV_DATA_API_KEY":      "data.carv.api_key",
+		"WALLET_PRIVATE_KEY":     "wallet.private_key",
 	}
 
 	// override config values with environment variables

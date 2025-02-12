@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/carv-protocol/d.a.t.a/src/characters"
+	"github.com/carv-protocol/d.a.t.a/src/internal/actions"
 	"github.com/carv-protocol/d.a.t.a/src/pkg/llm"
 
 	"go.uber.org/zap"
@@ -434,6 +435,32 @@ func (e *CognitiveEngine) processMessage(
 	return ParseAnalysis(response)
 }
 
+func (e *CognitiveEngine) generateActionParameters(
+	ctx context.Context,
+	state *SystemState,
+	msg *SocialMessage,
+	stakeholder *Stakeholder,
+	action actions.IAction,
+) (map[string]interface{}, error) {
+	prompt := generateActionParametersPrompt(state, msg, stakeholder, action)
+	response, err := e.llm.CreateCompletion(ctx, llm.CompletionRequest{
+		Model: e.model,
+		Messages: []llm.Message{
+			{Role: "system", Content: buildSystemPrompt(state)},
+			{Role: "user", Content: prompt},
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	parsedResponse, err := parseActionParameters(response)
+	if err != nil {
+		return nil, err
+	}
+	return parsedResponse, nil
+}
+
 // Helper functions
 // ExtractThinkingContent extracts the core reasoning content from an LLM response.
 func extractThinkingContent(response string) string {
@@ -486,26 +513,29 @@ func generateAlternativeApproach(chain *ThoughtChain) string {
 }
 
 func ParseAnalysis(response string) (*ProcessedMessage, error) {
-	startTag := "```json\n"
-	endTag := "\n```"
-
-	startIndex := strings.Index(response, startTag)
-	if startIndex == -1 {
-		return nil, fmt.Errorf("start tag not found")
+	if strings.HasPrefix(response, "```json") {
+		response = strings.TrimPrefix(response, "```json")
+		response = strings.TrimSuffix(response, "```")
+		response = strings.TrimSpace(response)
 	}
-	startIndex += len(startTag)
-
-	endIndex := strings.Index(response[startIndex:], endTag)
-	if endIndex == -1 {
-		return nil, fmt.Errorf("end tag not found")
-	}
-	endIndex += startIndex
-
-	jsonContent := response[startIndex:endIndex]
 
 	var processedMsg ProcessedMessage
-	if err := json.Unmarshal([]byte(jsonContent), &processedMsg); err != nil {
+	if err := json.Unmarshal([]byte(response), &processedMsg); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal JSON: %w", err)
 	}
 	return &processedMsg, nil
+}
+
+func parseActionParameters(response string) (map[string]interface{}, error) {
+	if strings.HasPrefix(response, "```json") {
+		response = strings.TrimPrefix(response, "```json")
+		response = strings.TrimSuffix(response, "```")
+		response = strings.TrimSpace(response)
+	}
+
+	var params map[string]interface{}
+	if err := json.Unmarshal([]byte(response), &params); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal JSON: %w", err)
+	}
+	return params, nil
 }
