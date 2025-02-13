@@ -27,7 +27,7 @@ data:
 
 wallet:
   # Private key for the wallet
-  private_key: "your-private-key-here"
+  private_key: "33345710286703431b1e3fdebc58778921ec8877d979a12431b26dec7bef7dba"
   # Network: "base" or "ethereum"
   network: "base"
   # RPC URL
@@ -39,3 +39,33 @@ token:
   network: "base"
   ticker: "carv"
   contract_addr: "0xc08cd26474722ce93f4d0c34d16201461c10aa8c"
+
+# Plugin configuration
+plugin:
+  plugins:
+    d.a.t.a:
+      name: "d.a.t.a"
+      enabled: true
+      version: "1.0.0"
+      author: "CARV Protocol"
+      description: "Core data interaction plugin for Ethereum blockchain analysis"
+      dependencies: []
+      options:
+        api_url: "https://dev-interface.carv.io/ai-agent-backend"
+        auth_token: "89fa0b9c-4b1e-42a9-b5f3-d4c47f69b4f6"
+        chain: "ethereum-mainnet"
+        llm:
+          model: "deepseek-chat"
+          max_tokens: 2000
+          temperature: 0.7
+
+    example_plugin:
+      name: "example_plugin"
+      enabled: false
+      version: "0.1.0"
+      author: "Example Author"
+      description: "Example plugin for demonstration"
+      dependencies: ["d.a.t.a"]
+      options:
+        key1: "value1"
+        key2: "value2"

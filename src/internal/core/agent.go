@@ -10,25 +10,27 @@ import (
 
 	"github.com/carv-protocol/d.a.t.a/src/characters"
 	"github.com/carv-protocol/d.a.t.a/src/internal/actions"
+	pluginCore "github.com/carv-protocol/d.a.t.a/src/plugins/core"
 
 	"github.com/google/uuid"
 	"go.uber.org/zap"
 )
 
 type Agent struct {
-	ID            uuid.UUID
-	cognitive     *CognitiveEngine
-	character     *characters.Character
-	taskManager   TaskManager
-	actionManager actions.ActionManager
-	logger        *zap.SugaredLogger
-	toolManager   ToolManager
-	stakeholders  StakeholderManager
-	TokenManager  TokenManager
-	socialClient  SocialClient
-	Goals         []Goal
-	ctx           context.Context
-	cancel        context.CancelFunc
+	ID             uuid.UUID
+	cognitive      *CognitiveEngine
+	character      *characters.Character
+	taskManager    TaskManager
+	actionManager  actions.ActionManager
+	logger         *zap.SugaredLogger
+	toolManager    ToolManager
+	stakeholders   StakeholderManager
+	TokenManager   TokenManager
+	socialClient   SocialClient
+	pluginRegistry *pluginCore.Registry
+	Goals          []Goal
+	ctx            context.Context
+	cancel         context.CancelFunc
 }
 
 // SystemState represents the complete state of the agent system
@@ -169,10 +171,21 @@ func (a *Agent) getCurrentState() *SystemState {
 	nativeToken, _ := a.TokenManager.NativeTokenInfo(a.ctx)
 	tasks, _ := a.taskManager.GetTasks(a.ctx)
 
+	// Get plugin actions
+	var pluginActions []actions.IAction
+	if a.pluginRegistry != nil {
+		for _, plugin := range a.pluginRegistry.GetPlugins() {
+			for _, action := range plugin.Actions() {
+				adapter := pluginCore.NewActionAdapter(a.ctx, action)
+				pluginActions = append(pluginActions, adapter)
+			}
+		}
+	}
+
 	return &SystemState{
 		Character:              a.character,
 		AvailableTools:         a.toolManager.AvailableTools(),
-		AvailableActions:       a.toolManager.AvailableActions(),
+		AvailableActions:       append(a.toolManager.AvailableActions(), pluginActions...),
 		Timestamp:              time.Now(),
 		AgentStates:            a.GetState(),
 		StakeholderPreferences: pref,
@@ -374,18 +387,19 @@ func NewAgent(config AgentConfig) (*Agent, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	agent := &Agent{
-		ID:            config.ID,
-		character:     config.Character,
-		cognitive:     NewCognitiveEngine(config.LLMClient, config.Model, config.Character, sugar),
-		taskManager:   config.TaskManager,
-		actionManager: config.ActionManager,
-		logger:        sugar,
-		toolManager:   config.ToolsManager,
-		stakeholders:  config.Stakeholders,
-		TokenManager:  config.TokenManager,
-		socialClient:  config.SocialClient,
-		ctx:           ctx,
-		cancel:        cancel,
+		ID:             config.ID,
+		character:      config.Character,
+		cognitive:      NewCognitiveEngine(config.LLMClient, config.Model, config.Character, sugar),
+		taskManager:    config.TaskManager,
+		actionManager:  config.ActionManager,
+		logger:         sugar,
+		toolManager:    config.ToolsManager,
+		stakeholders:   config.Stakeholders,
+		TokenManager:   config.TokenManager,
+		socialClient:   config.SocialClient,
+		pluginRegistry: config.PluginRegistry,
+		ctx:            ctx,
+		cancel:         cancel,
 	}
 
 	return agent, nil

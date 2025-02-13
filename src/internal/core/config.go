@@ -7,22 +7,24 @@ import (
 	"github.com/carv-protocol/d.a.t.a/src/characters"
 	"github.com/carv-protocol/d.a.t.a/src/internal/actions"
 	"github.com/carv-protocol/d.a.t.a/src/pkg/llm"
+	pluginCore "github.com/carv-protocol/d.a.t.a/src/plugins/core"
 	"github.com/google/uuid"
 )
 
 // AgentConfig represents the configuration for creating a new agent
 type AgentConfig struct {
-	ID            uuid.UUID
-	Character     *characters.Character
-	LLMClient     llm.Client
-	Model         string
-	TaskManager   TaskManager
-	ActionManager actions.ActionManager
-	ToolsManager  ToolManager
-	Stakeholders  StakeholderManager
-	TokenManager  TokenManager
-	SocialClient  SocialClient
-	Training      struct {
+	ID             uuid.UUID
+	Character      *characters.Character
+	LLMClient      llm.Client
+	Model          string
+	TaskManager    TaskManager
+	ActionManager  actions.ActionManager
+	ToolsManager   ToolManager
+	Stakeholders   StakeholderManager
+	TokenManager   TokenManager
+	SocialClient   SocialClient
+	PluginRegistry *pluginCore.Registry
+	Training       struct {
 		Enabled       bool
 		MaxIterations int
 		BatchSize     int
