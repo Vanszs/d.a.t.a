@@ -128,9 +128,9 @@ func initializeAgent(ctx context.Context, config *Config) (*core.Agent, error) {
 		Stakeholders: stakeholderManager,
 		ToolsManager: toolsManager,
 		SocialClient: social.NewSocialClient(
-			nil,
+			&config.Social.TwitterConfig,
 			&config.Social.DiscordConfig,
-			nil,
+			&config.Social.TelegramConfig,
 		),
 		TaskManager:    tasks.NewManager(tasks.NewTaskStore(store)),
 		ActionManager:  actionManager,
