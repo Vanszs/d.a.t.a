@@ -198,7 +198,7 @@ func (a *Agent) monitorSocialInputs() {
 
 // executeAction executes a generic action
 func (a *Agent) executeAction(ctx context.Context, action actions.IAction, params map[string]interface{}) error {
-	a.logger.Infow("Executing action", "type", action.Type())
+	a.logger.Infow("Executing action", "type", action.Type(), "params", params)
 	return action.Execute(ctx, params)
 }
 
@@ -258,6 +258,19 @@ func (a *Agent) executeActionWithResponse(ctx context.Context, action actions.IA
 // }
 
 func (a *Agent) processMessage(msg *SocialMessage) error {
+	var err error
+	defer func() {
+		if err != nil {
+			a.logger.Errorw("Error processing message", "error", err)
+			a.socialClient.SendMessage(a.ctx, SocialMessage{
+				Platform: msg.Platform,
+				Type:     "Response",
+				Content:  "Something went wrong. Please try again later.",
+				Metadata: msg.Metadata,
+			})
+		}
+	}()
+
 	state := a.getCurrentState()
 
 	stakeholder, err := a.stakeholders.FetchOrCreateStakeholder(

@@ -265,7 +265,7 @@ func (e *CognitiveEngine) generateThoughtStep(
 	response, err := e.llm.CreateCompletion(ctx, llm.CompletionRequest{
 		Model: e.model,
 		Messages: []llm.Message{
-			{Role: "system", Content: buildSystemPrompt(state)},
+			{Role: "system", Content: buildSystemPrompt(state, nil)},
 			{Role: "user", Content: prompt},
 		},
 	})
@@ -419,7 +419,7 @@ func (e *CognitiveEngine) processMessage(
 		Messages: []llm.Message{
 			{
 				Role:    "system",
-				Content: buildSystemPrompt(state),
+				Content: buildSystemPrompt(state, stakeholder),
 			},
 			{
 				Role:    "user",
@@ -446,7 +446,7 @@ func (e *CognitiveEngine) generateActionParameters(
 	response, err := e.llm.CreateCompletion(ctx, llm.CompletionRequest{
 		Model: e.model,
 		Messages: []llm.Message{
-			{Role: "system", Content: buildSystemPrompt(state)},
+			{Role: "system", Content: buildSystemPrompt(state, stakeholder)},
 			{Role: "user", Content: prompt},
 		},
 	})
