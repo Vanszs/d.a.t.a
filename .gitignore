@@ -12,4 +12,4 @@ d.a.t.a.json
 
 config
 main
-data/data.db
+data/*

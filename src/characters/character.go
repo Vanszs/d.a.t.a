@@ -8,6 +8,8 @@ type Character struct {
 	Style            StyleGuide
 	Topics           []string
 	Goals            []Goal
+	MessageExamples  []string
+	TaskInstructions string
 	PriorityAccounts []Account
 	Preferences      map[string]float64
 }

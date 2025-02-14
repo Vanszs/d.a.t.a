@@ -49,7 +49,6 @@ type Config struct {
 func setDefaultConfig() {
 	viper.SetDefault("database.type", "sqlite")
 	viper.SetDefault("database.path", "./data/data.db")
-	viper.SetDefault("social.twitter.mode", "api")
 	viper.SetDefault("llm_config.provider", "openai")
 	viper.SetDefault("llm_config.base_url", "https://api.openai.com/v1")
 	viper.SetDefault("llm_config.model", "gpt-4o") // Default model for OpenAI
