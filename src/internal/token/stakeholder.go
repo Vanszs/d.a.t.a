@@ -84,7 +84,8 @@ func (sm *StakeholderManager) AddHistoricalMsg(ctx context.Context, id, platform
 		return err
 	}
 	stakeholder.HistoricalMsgs = append(stakeholder.HistoricalMsgs, msgs...)
-
+	if len(stakeholder.HistoricalMsgs) > 10 {
+		stakeholder.HistoricalMsgs = stakeholder.HistoricalMsgs[len(stakeholder.HistoricalMsgs)-10:]
 	res, err := json.Marshal(stakeholder)
 	if err != nil {
 		return err
