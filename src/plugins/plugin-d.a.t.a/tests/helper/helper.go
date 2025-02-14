@@ -1,42 +1,34 @@
 package helper
 
 import (
-	"os"
 	"testing"
 
 	"github.com/carv-protocol/d.a.t.a/src/pkg/llm"
-	"github.com/carv-protocol/d.a.t.a/src/plugins/d.a.t.a/actions"
-	"github.com/carv-protocol/d.a.t.a/src/plugins/d.a.t.a/providers"
+	"github.com/carv-protocol/d.a.t.a/src/plugins/plugin-d.a.t.a/providers"
+	"github.com/carv-protocol/d.a.t.a/src/plugins/plugin-d.a.t.a/types"
+	"go.uber.org/zap"
 )
 
 const defaultModel = "gpt-4"
 
-// SetupTestProvider creates a new database provider for testing
-func SetupTestProvider(t *testing.T) actions.DatabaseProvider {
-	t.Helper()
-	apiURL := os.Getenv("DATA_API_KEY")
-	if apiURL == "" {
-		t.Skip("DATA_API_KEY not set")
-	}
-	authToken := os.Getenv("DATA_AUTH_TOKEN")
-	if authToken == "" {
-		t.Skip("DATA_AUTH_TOKEN not set")
-	}
-	return providers.NewDatabaseProvider(apiURL, authToken, "ethereum-mainnet", nil, defaultModel)
+// SetupTestProvider creates a test database provider
+func SetupTestProvider(t *testing.T) types.DatabaseProvider {
+	return SetupTestProviderWithLLM(t, nil)
 }
 
-// SetupTestProviderWithLLM creates a new database provider with LLM client for testing
-func SetupTestProviderWithLLM(t *testing.T, llmClient llm.Client) actions.DatabaseProvider {
-	t.Helper()
-	apiURL := os.Getenv("DATA_API_KEY")
-	if apiURL == "" {
-		t.Skip("DATA_API_KEY not set")
-	}
-	authToken := os.Getenv("DATA_AUTH_TOKEN")
-	if authToken == "" {
-		t.Skip("DATA_AUTH_TOKEN not set")
-	}
-	return providers.NewDatabaseProvider(apiURL, authToken, "ethereum-mainnet", llmClient, defaultModel)
+// SetupTestProviderWithLLM creates a test database provider with a specific LLM client
+func SetupTestProviderWithLLM(t *testing.T, llmClient llm.Client) types.DatabaseProvider {
+	return providers.NewDatabaseProvider(
+		"test_provider",
+		"http://test.api",
+		"test-token",
+		"ethereum",
+		"test-schema",
+		"test-examples",
+		llmClient,
+		"test-model",
+		zap.NewNop().Sugar(),
+	)
 }
 
 // StrPtr returns a pointer to the given string

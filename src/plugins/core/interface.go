@@ -32,6 +32,9 @@ type Action interface {
 	// Description returns the description of the action
 	Description() string
 
+	// Type returns the type of the action
+	Type() string
+
 	// Execute executes the action with given parameters
 	Execute(ctx context.Context, params map[string]interface{}) (interface{}, error)
 }
@@ -48,13 +51,34 @@ type FetchTransactionActionAdapter interface {
 	GetAction() FetchTransactionAction
 }
 
-// Provider defines the interface for plugin data providers
+// ProviderState represents the current state of a provider
+type ProviderState struct {
+	// Name of the provider
+	Name string `json:"name"`
+
+	// Type of the provider
+	Type string `json:"type"`
+
+	// Current state of the provider
+	State string `json:"state"`
+
+	// Additional metadata specific to the provider type
+	Metadata map[string]interface{} `json:"metadata"`
+
+	// Any error state
+	Error string `json:"error,omitempty"`
+}
+
+// Provider interface defines methods that must be implemented by all providers
 type Provider interface {
-	// Name returns the unique name of the provider
+	// Name returns the name of the provider
 	Name() string
 
-	// GetData retrieves data with given parameters
-	GetData(ctx context.Context, params map[string]interface{}) (interface{}, error)
+	// Type returns the type of the provider
+	Type() string
+
+	// GetState returns the current state of the provider
+	GetProviderState(ctx context.Context) (*ProviderState, error)
 }
 
 // Evaluator defines the interface for plugin evaluators

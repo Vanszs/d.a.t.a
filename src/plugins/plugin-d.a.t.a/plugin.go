@@ -9,6 +9,7 @@ import (
 	"github.com/carv-protocol/d.a.t.a/src/plugins/core"
 	"github.com/carv-protocol/d.a.t.a/src/plugins/plugin-d.a.t.a/actions"
 	"github.com/carv-protocol/d.a.t.a/src/plugins/plugin-d.a.t.a/providers"
+	"github.com/carv-protocol/d.a.t.a/src/plugins/plugin-d.a.t.a/types"
 	"go.uber.org/zap"
 )
 
@@ -134,11 +135,24 @@ func (p *Plugin) validateConfig(opts map[string]interface{}) error {
 
 // DatabaseProviderAdapter adapts DatabaseProvider to core.Provider interface
 type DatabaseProviderAdapter struct {
-	provider actions.DatabaseProvider
+	provider types.DatabaseProvider
+	logger   *zap.SugaredLogger
 }
 
 func (a *DatabaseProviderAdapter) Name() string {
 	return "ethereum_database_provider"
+}
+
+func (a *DatabaseProviderAdapter) Type() string {
+	return "database"
+}
+
+func (a *DatabaseProviderAdapter) GetProviderState(ctx context.Context) (*core.ProviderState, error) {
+	providerImpl, ok := a.provider.(*providers.DatabaseProviderImpl)
+	if !ok {
+		return nil, fmt.Errorf("invalid provider type: expected *DatabaseProviderImpl")
+	}
+	return providerImpl.GetProviderState(ctx)
 }
 
 func (a *DatabaseProviderAdapter) GetData(ctx context.Context, params map[string]interface{}) (interface{}, error) {
@@ -147,11 +161,11 @@ func (a *DatabaseProviderAdapter) GetData(ctx context.Context, params map[string
 
 // FetchTransactionActionAdapter adapts FetchTransactionAction to core.Action interface
 type FetchTransactionActionAdapter struct {
-	action *actions.FetchTransactionAction
+	action core.FetchTransactionAction
 	logger *zap.SugaredLogger
 }
 
-func NewFetchTransactionActionAdapter(action *actions.FetchTransactionAction, logger *zap.SugaredLogger) *FetchTransactionActionAdapter {
+func NewFetchTransactionActionAdapter(action core.FetchTransactionAction, logger *zap.SugaredLogger) *FetchTransactionActionAdapter {
 	return &FetchTransactionActionAdapter{
 		action: action,
 		logger: logger,
@@ -210,34 +224,43 @@ func (p *Plugin) Init(ctx context.Context, opts map[string]interface{}) error {
 	llmConfig, ok := p.config.Options[ConfigKeyLLM].(map[string]interface{})
 	if !ok {
 		// Try converting from map[interface{}]interface{}
-		if llmConfig2, ok := p.config.Options[ConfigKeyLLM].(map[interface{}]interface{}); ok {
-			llmConfig = make(map[string]interface{})
-			for k, v := range llmConfig2 {
-				if kStr, ok := k.(string); ok {
-					llmConfig[kStr] = v
-				}
+		llmConfig2, ok := p.config.Options[ConfigKeyLLM].(map[interface{}]interface{})
+		if !ok {
+			return fmt.Errorf("invalid LLM configuration type: expected map[string]interface{} or map[interface{}]interface{}")
+		}
+		// Convert to map[string]interface{}
+		llmConfig = make(map[string]interface{})
+		for k, v := range llmConfig2 {
+			if kStr, ok := k.(string); ok {
+				llmConfig[kStr] = v
 			}
-		} else {
-			return fmt.Errorf("invalid LLM configuration type")
 		}
 	}
 
 	model, ok := llmConfig["model"].(string)
-	if !ok {
+	if !ok || model == "" {
 		return fmt.Errorf("invalid or missing model in LLM configuration")
 	}
 
+	// Create provider using factory
 	provider := providers.NewDatabaseProvider(
+		"ethereum_database_provider",
 		p.config.Options[ConfigKeyAPIURL].(string),
 		p.config.Options[ConfigKeyAuthToken].(string),
 		p.config.Options[ConfigKeyChain].(string),
+		getDefaultDatabaseSchema(),
+		getDefaultQueryExamples(),
 		p.llmClient,
 		model,
+		p.logger,
 	)
-	providerAdapter := &DatabaseProviderAdapter{provider: provider}
+	providerAdapter := &DatabaseProviderAdapter{
+		provider: provider,
+		logger:   p.logger,
+	}
 	p.providers = append(p.providers, providerAdapter)
 
-	// Initialize action
+	// Create action using factory
 	action := actions.NewFetchTransactionAction(provider)
 	actionAdapter := NewFetchTransactionActionAdapter(action, p.logger)
 	p.actions = append(p.actions, actionAdapter)
@@ -307,4 +330,57 @@ func (p *Plugin) Stop(ctx context.Context) error {
 
 	p.logger.Info("Data plugin stopped successfully")
 	return nil
+}
+
+// getDefaultDatabaseSchema returns the default database schema
+func getDefaultDatabaseSchema() string {
+	return `
+CREATE EXTERNAL TABLE transactions(
+    hash string,
+    nonce bigint,
+    block_hash string,
+    block_number bigint,
+    block_timestamp timestamp,
+    date string,
+    transaction_index bigint,
+    from_address string,
+    to_address string,
+    value double,
+    gas bigint,
+    gas_price bigint,
+    input string,
+    max_fee_per_gas bigint,
+    max_priority_fee_per_gas bigint,
+    transaction_type bigint
+) PARTITIONED BY (date string);
+`
+}
+
+// getDefaultQueryExamples returns default query examples
+func getDefaultQueryExamples() string {
+	return `
+Common Query Examples:
+
+1. Find Most Active Addresses in Last 7 Days:
+SELECT from_address, COUNT(*) as tx_count 
+FROM eth.transactions 
+WHERE date >= date_format(date_add('day', -7, current_date), '%Y-%m-%d')
+GROUP BY from_address 
+ORDER BY tx_count DESC 
+LIMIT 10;
+
+2. Analyze Gas Price Trends:
+SELECT date_trunc('hour', block_timestamp) as hour,
+       avg(gas_price) as avg_gas_price
+FROM eth.transactions
+WHERE date >= date_sub(current_date(), 1)
+GROUP BY 1
+ORDER BY 1;
+
+3. Find latest transactions:
+SELECT * FROM eth.transactions 
+WHERE date >= date_format(date_add('day', -7, current_date), '%Y-%m-%d')
+ORDER BY block_timestamp DESC 
+LIMIT 3;
+`
 }

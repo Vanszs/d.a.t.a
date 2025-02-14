@@ -7,70 +7,23 @@ import (
 	"time"
 
 	"github.com/carv-protocol/d.a.t.a/src/plugins/core"
+	"github.com/carv-protocol/d.a.t.a/src/plugins/plugin-d.a.t.a/types"
 )
 
 // Ensure FetchTransactionAction implements core.FetchTransactionAction
 var _ core.FetchTransactionAction = (*FetchTransactionAction)(nil)
 
-// BlockStats , the statistics of the blocks
-type BlockStats struct {
-	BlockRange struct {
-		StartBlock string `json:"startBlock"`
-		EndBlock   string `json:"endBlock"`
-		BlockCount int    `json:"blockCount"`
-	} `json:"blockRange"`
-	TimeRange struct {
-		StartTime       string `json:"startTime"`
-		EndTime         string `json:"endTime"`
-		TimeSpanSeconds int    `json:"timeSpanSeconds"`
-	} `json:"timeRange"`
-	UniqueBlocks                int     `json:"uniqueBlocks"`
-	AverageTransactionsPerBlock float64 `json:"averageTransactionsPerBlock"`
-}
-
-// TransactionQueryResult , the result of the transaction query
-type TransactionQueryResult struct {
-	Success  bool          `json:"success"`
-	Data     []interface{} `json:"data"`
-	Analysis string        `json:"analysis,omitempty"`
-	Metadata struct {
-		Total         int    `json:"total"`
-		QueryTime     string `json:"queryTime"`
-		QueryType     string `json:"queryType"`
-		ExecutionTime int    `json:"executionTime"`
-		Cached        bool   `json:"cached"`
-		QueryDetails  *struct {
-			Query           string   `json:"query"`
-			ParamValidation []string `json:"paramValidation,omitempty"`
-		} `json:"queryDetails,omitempty"`
-		BlockStats *BlockStats `json:"blockStats,omitempty"`
-	} `json:"metadata"`
-	Error *struct {
-		Code    string      `json:"code"`
-		Message string      `json:"message"`
-		Details interface{} `json:"details,omitempty"`
-	} `json:"error,omitempty"`
-}
-
-// DatabaseProvider , the interface of the database provider
-type DatabaseProvider interface {
-	ExecuteQuery(ctx context.Context, sql string) (*TransactionQueryResult, error)
-	ProcessQuery(ctx context.Context, params map[string]interface{}) (*TransactionQueryResult, error)
-	AnalyzeQuery(ctx context.Context, result *TransactionQueryResult) (string, error)
-	GenerateQuery(ctx context.Context, message string) (string, error)
-}
-
-// FetchTransactionAction , the action of the fetch transaction
+// FetchTransactionAction represents the action for fetching transactions
 type FetchTransactionAction struct {
 	name        string
 	description string
-	dbProvider  DatabaseProvider
+	dbProvider  types.DatabaseProvider
 	examples    []string
 	similes     []string
 }
 
-// NewFetchTransactionAction , the new action of the fetch transaction
-func NewFetchTransactionAction(dbProvider DatabaseProvider) *FetchTransactionAction {
+// NewFetchTransactionAction creates a new fetch transaction action
+func NewFetchTransactionAction(dbProvider types.DatabaseProvider) *FetchTransactionAction {
 	return &FetchTransactionAction{
 		name:        "fetch_transactions",
 		description: "Fetch and analyze Ethereum transactions with comprehensive statistics",
@@ -99,14 +52,13 @@ func NewFetchTransactionAction(dbProvider DatabaseProvider) *FetchTransactionAct
 func (a *FetchTransactionAction) Execute(ctx context.Context, params map[string]interface{}) (interface{}, error) {
 	// Get message content from params
 	message, ok := params["message"].(string)
-	fmt.Printf("@@@ Message: %s\n", message)
 	if !ok {
 		return nil, fmt.Errorf("message parameter is required")
 	}
 
 	// Generate query from message
 	query, err := a.GenerateQuery(ctx, message)
-	fmt.Printf("@@@ Generated Query: %s\n", query)
+	fmt.Printf("Generated Query: %s\n", query)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate query: %w", err)
 	}
@@ -122,12 +74,11 @@ func (a *FetchTransactionAction) Execute(ctx context.Context, params map[string]
 		return nil, nil
 	}
 
-	queryResult, ok := result.(*TransactionQueryResult)
+	queryResult, ok := result.(*types.TransactionQueryResult)
 	if !ok {
 		return nil, fmt.Errorf("unexpected result type: %T", result)
 	}
 
-	// fmt.Printf("@@@ Query Result: %+v\n", queryResult)
 	return queryResult, nil
 }
 
@@ -172,17 +123,17 @@ func (a *FetchTransactionAction) Type() string {
 	return "fetch_transactions"
 }
 
-// GetExamples , the examples of the fetch transaction
+// GetExamples returns the examples of the fetch transaction
 func (a *FetchTransactionAction) GetExamples() []string {
 	return a.examples
 }
 
-// GetSimiles , the similes of the fetch transaction
+// GetSimiles returns the similes of the fetch transaction
 func (a *FetchTransactionAction) GetSimiles() []string {
 	return a.similes
 }
 
-// ValidateParams , the validation of the parameters
+// ValidateParams validates the parameters
 func (a *FetchTransactionAction) ValidateParams(params map[string]interface{}) error {
 	// 1. validate the date format
 	if startDate, ok := params["startDate"].(string); ok {
@@ -321,27 +272,11 @@ func getQueryTemplate() string {
 
 // GenerateQuery generates a SQL query based on the message
 func (a *FetchTransactionAction) GenerateQuery(ctx context.Context, message string) (string, error) {
-	// Build the prompt by replacing placeholders in template
-	prompt := getQueryTemplate()
-	prompt = strings.ReplaceAll(prompt, "{{databaseSchema}}", getDatabaseSchema())
-	prompt = strings.ReplaceAll(prompt, "{{queryExamples}}", getQueryExamples())
-	prompt = strings.ReplaceAll(prompt, "{{userQuery}}", message)
-
-	fmt.Printf("@@@ user query for message: %s\n", message)
-	// fmt.Printf("@@@ Using prompt: %s\n", prompt)
-
-	// Call provider to generate query
-	query, err := a.dbProvider.GenerateQuery(ctx, prompt)
-	if err != nil {
-		return "", fmt.Errorf("failed to generate query: %w", err)
-	}
-
-	fmt.Printf("@@@ Generated sql query: %s\n", query)
-	return query, nil
+	return a.dbProvider.GenerateQuery(ctx, message)
 }
 
 // FormatQueryResult formats the transaction query result into a readable string
-func FormatQueryResult(result *TransactionQueryResult) string {
+func FormatQueryResult(result *types.TransactionQueryResult) string {
 	if !result.Success {
 		return fmt.Sprintf("Query failed: %s", result.Error.Message)
 	}

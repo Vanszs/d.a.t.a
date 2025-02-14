@@ -95,29 +95,10 @@ func initializeAgent(ctx context.Context, config *Config) (*core.Agent, error) {
 	// Initialize plugins
 	pluginRegistry := initializePlugins(config)
 
-	// Initialize each plugin with its own options
-	for name, pluginConfig := range config.Plugin.Plugins {
-		if !pluginConfig.Enabled {
-			continue
-		}
-
-		// Check if plugin is registered
-		if _, exists := pluginRegistry.GetPlugin(name); !exists {
-			log.Printf("Plugin %s is not registered, skipping initialization", name)
-			continue
-		}
-
-		if err := pluginRegistry.InitPlugin(ctx, name, pluginConfig.Options); err != nil {
-			return nil, fmt.Errorf("failed to initialize plugin %s: %w", name, err)
-		}
+	actionManager, err := registerPlugins(ctx, pluginRegistry, config)
+	if err != nil {
+		return nil, fmt.Errorf("failed to register plugins: %w", err)
 	}
-
-	if err := pluginRegistry.StartAll(ctx); err != nil {
-		return nil, fmt.Errorf("failed to start plugins: %w", err)
-	}
-
-	// Initialize action manager and register actions
-	actionManager := actions.NewManager()
 
 	// Create agent
 	agentConfig := core.AgentConfig{
@@ -206,6 +187,43 @@ func initializePlugins(config *Config) *pluginCore.Registry {
 	}
 
 	return registry
+}
+
+// returns the action manager
+func registerPlugins(ctx context.Context, pluginRegistry *pluginCore.Registry, config *Config) (actions.ActionManager, error) {
+	// Initialize each plugin with its own options
+	for name, pluginConfig := range config.Plugin.Plugins {
+		if !pluginConfig.Enabled {
+			continue
+		}
+
+		// Check if plugin is registered
+		if _, exists := pluginRegistry.GetPlugin(name); !exists {
+			log.Printf("Plugin %s is not registered, skipping initialization", name)
+			continue
+		}
+
+		if err := pluginRegistry.InitPlugin(ctx, name, pluginConfig.Options); err != nil {
+			return nil, fmt.Errorf("failed to initialize plugin %s: %w", name, err)
+		}
+	}
+
+	if err := pluginRegistry.StartAll(ctx); err != nil {
+		return nil, fmt.Errorf("failed to start plugins: %w", err)
+	}
+
+	// Initialize action manager and register actions
+	actionManager := actions.NewManager()
+
+	for _, pluginAction := range pluginRegistry.GetActions() {
+		log.Printf("Registering action %s", pluginAction.Name())
+		adapter := pluginCore.NewActionAdapter(ctx, pluginAction)
+		if err := actionManager.Register(adapter); err != nil {
+			return nil, fmt.Errorf("failed to register action %s: %w", pluginAction.Name(), err)
+		}
+	}
+
+	return actionManager, nil
 }
 
 // checkPluginDependencies verifies that all plugin dependencies are enabled

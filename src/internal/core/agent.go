@@ -51,6 +51,7 @@ type SystemState struct {
 	ActiveTasks     []*Task
 	PendingActions  []actions.IAction
 	NativeTokenInfo *TokenInfo
+	ProviderStates  []*pluginCore.ProviderState
 }
 
 type Goal struct {
@@ -171,15 +172,40 @@ func (a *Agent) getCurrentState() *SystemState {
 	nativeToken, _ := a.TokenManager.NativeTokenInfo(a.ctx)
 	tasks, _ := a.taskManager.GetTasks(a.ctx)
 
-	// Get plugin actions
+	// Get plugin actions and provider states
 	var pluginActions []actions.IAction
+	var providerStates []*pluginCore.ProviderState
+
 	if a.pluginRegistry != nil {
+		// Collect actions from plugins
 		for _, plugin := range a.pluginRegistry.GetPlugins() {
 			for _, action := range plugin.Actions() {
 				adapter := pluginCore.NewActionAdapter(a.ctx, action)
 				pluginActions = append(pluginActions, adapter)
 			}
 		}
+
+		// Collect provider states
+		for _, provider := range a.pluginRegistry.GetProviders() {
+			if state, err := provider.GetProviderState(a.ctx); err == nil {
+				providerStates = append(providerStates, state)
+			} else {
+				a.logger.Warnw("Failed to get provider state",
+					"provider", provider.Name(),
+					"error", err,
+				)
+			}
+		}
+	}
+
+	// print all available actions
+	for _, action := range pluginActions {
+		a.logger.Infof("Available action: %s", action.Name())
+	}
+
+	// print all provider states
+	for _, state := range providerStates {
+		a.logger.Infof("Provider state: %+v", state)
 	}
 
 	return &SystemState{
@@ -191,6 +217,7 @@ func (a *Agent) getCurrentState() *SystemState {
 		StakeholderPreferences: pref,
 		ActiveTasks:            tasks,
 		NativeTokenInfo:        nativeToken,
+		ProviderStates:         providerStates,
 	}
 }
 
@@ -313,13 +340,34 @@ func (a *Agent) processMessage(msg *SocialMessage) error {
 
 	if processedMsg.ShouldGenerateAction {
 		for _, action := range processedMsg.Actions {
-			action, err := a.toolManager.GetAction(action.ActionType, action.ActionName)
+			var actionImpl actions.IAction
+			actionImpl, err := a.toolManager.GetAction(action.ActionType, action.ActionName)
 			if err != nil {
-				a.logger.Errorw("Error getting action", "error", err)
-				return err
+				// If action not found in toolManager, try to find it in pluginRegistry
+				if a.pluginRegistry != nil {
+					for _, plugin := range a.pluginRegistry.GetPlugins() {
+						for _, pluginAction := range plugin.Actions() {
+							if pluginAction.Type() == action.ActionType && pluginAction.Name() == action.ActionName {
+								actionImpl = pluginCore.NewActionAdapter(a.ctx, pluginAction)
+								break
+							}
+						}
+						if actionImpl != nil {
+							break
+						}
+					}
+				}
+
+				if actionImpl == nil {
+					a.logger.Errorw("Error getting action", "error", err)
+					return err
+				}
+				a.logger.Infof("Action found in pluginRegistry: %s", actionImpl.Name())
+			} else {
+				a.logger.Infof("Action found in toolManager: %s", actionImpl.Name())
 			}
 
-			params, err := a.cognitive.generateActionParameters(a.ctx, state, msg, stakeholder, action)
+			params, err := a.cognitive.generateActionParameters(a.ctx, state, msg, stakeholder, actionImpl)
 			if err != nil {
 				a.logger.Errorw("Error generating action parameters", "error", err)
 				return err
@@ -332,7 +380,7 @@ func (a *Agent) processMessage(msg *SocialMessage) error {
 				continue
 			}
 
-			if err = a.executeAction(a.ctx, action, params); err != nil {
+			if err = a.executeAction(a.ctx, actionImpl, params); err != nil {
 				a.logger.Errorw("Error executing action", "error", err)
 				return err
 			}

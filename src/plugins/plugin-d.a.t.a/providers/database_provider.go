@@ -12,7 +12,8 @@ import (
 
 	"github.com/carv-protocol/d.a.t.a/src/pkg/llm"
 	"github.com/carv-protocol/d.a.t.a/src/pkg/logger"
-	"github.com/carv-protocol/d.a.t.a/src/plugins/plugin-d.a.t.a/actions"
+	"github.com/carv-protocol/d.a.t.a/src/plugins/core"
+	"github.com/carv-protocol/d.a.t.a/src/plugins/plugin-d.a.t.a/types"
 	"go.uber.org/zap"
 )
 
@@ -23,6 +24,9 @@ const (
 	maxIdleConns        = 100
 	maxIdleConnsPerHost = 100
 	idleConnTimeout     = 90 * time.Second
+	maxRetries          = 3
+	requestTimeout      = 2 * time.Minute
+	maxQueryLength      = 5000
 )
 
 var defaultTransport = &http.Transport{
@@ -36,18 +40,6 @@ var defaultClient = &http.Client{
 	Transport: defaultTransport,
 }
 
-// APIResponse represents the response from the API
-type APIResponse struct {
-	Code int    `json:"code"`
-	Msg  string `json:"msg"`
-	Data struct {
-		ColumnInfos []string `json:"column_infos"`
-		Rows        []struct {
-			Items []interface{} `json:"items"`
-		} `json:"rows"`
-	} `json:"data"`
-}
-
 // QueryMetadata represents the metadata for a query
 type QueryMetadata struct {
 	ExecutionTime time.Duration `json:"executionTime"`
@@ -58,56 +50,59 @@ type QueryMetadata struct {
 	} `json:"queryDetails,omitempty"`
 }
 
-// TransactionQueryResult represents the result of a transaction query
-type TransactionQueryResult struct {
-	Success  bool          `json:"success"`
-	Data     []interface{} `json:"data"`
-	Analysis string        `json:"analysis"`
-	Metadata struct {
-		Total         int    `json:"total"`
-		QueryTime     string `json:"queryTime"`
-		QueryType     string `json:"queryType"`
-		ExecutionTime int    `json:"executionTime"`
-		Cached        bool   `json:"cached"`
-		QueryDetails  *struct {
-			Query           string   `json:"query"`
-			ParamValidation []string `json:"paramValidation,omitempty"`
-		} `json:"queryDetails,omitempty"`
-		BlockStats *actions.BlockStats `json:"blockStats,omitempty"`
-	} `json:"metadata"`
-	Error *struct {
-		Code    string      `json:"code"`
-		Message string      `json:"message"`
-		Details interface{} `json:"details,omitempty"`
-	} `json:"error,omitempty"`
-}
-
 // DatabaseProviderImpl implements the DatabaseProvider interface
 type DatabaseProviderImpl struct {
-	APIURL     string
-	AuthToken  string
-	Chain      string
-	DBSchema   string
-	SQLExample string
-	LLMClient  llm.Client
+	llmClient  llm.Client
+	logger     *zap.SugaredLogger
+	config     *DatabaseConfig
+	name       string
+	lastQuery  string
+	queryCount int
 	model      string
+	apiURL     string
+	authToken  string
+	chain      string
+	dbSchema   string
+	sqlExample string
 }
 
-// NewDatabaseProvider creates a new database provider
-func NewDatabaseProvider(apiURL, authToken, chain string, llmClient llm.Client, model string) actions.DatabaseProvider {
+// DatabaseConfig contains configuration for database connection
+type DatabaseConfig struct {
+	DatabaseType string
+	DatabaseName string
+	Host         string
+	Port         int
+	Username     string
+	Password     string
+}
+
+// NewDatabaseProvider creates a new database provider instance
+func NewDatabaseProvider(
+	name string,
+	apiURL string,
+	authToken string,
+	chain string,
+	dbSchema string,
+	sqlExample string,
+	llmClient llm.Client,
+	model string,
+	logger *zap.SugaredLogger,
+) *DatabaseProviderImpl {
 	return &DatabaseProviderImpl{
-		APIURL:     apiURL,
-		AuthToken:  authToken,
-		Chain:      chain,
-		DBSchema:   getDefaultDatabaseSchema(),
-		SQLExample: getDefaultQueryExamples(),
-		LLMClient:  llmClient,
+		name:       name,
+		apiURL:     apiURL,
+		authToken:  authToken,
+		chain:      chain,
+		dbSchema:   dbSchema,
+		sqlExample: sqlExample,
+		llmClient:  llmClient,
 		model:      model,
+		logger:     logger,
 	}
 }
 
 // ProcessQuery processes the query and returns the result
-func (p *DatabaseProviderImpl) ProcessQuery(ctx context.Context, params map[string]interface{}) (*actions.TransactionQueryResult, error) {
+func (p *DatabaseProviderImpl) ProcessQuery(ctx context.Context, params map[string]interface{}) (*types.TransactionQueryResult, error) {
 	// 1. Generate SQL query based on params
 	sql, err := p.GenerateQuery(ctx, fmt.Sprintf("%+v", params))
 	if err != nil {
@@ -125,7 +120,7 @@ func (p *DatabaseProviderImpl) ProcessQuery(ctx context.Context, params map[stri
 }
 
 // AnalyzeQuery analyzes the query result and returns insights
-func (p *DatabaseProviderImpl) AnalyzeQuery(ctx context.Context, result *actions.TransactionQueryResult) (string, error) {
+func (p *DatabaseProviderImpl) AnalyzeQuery(ctx context.Context, result *types.TransactionQueryResult) (string, error) {
 	if result == nil {
 		return "", fmt.Errorf("nil result provided for analysis")
 	}
@@ -148,54 +143,36 @@ func (p *DatabaseProviderImpl) AnalyzeQuery(ctx context.Context, result *actions
 }
 
 // GenerateQuery generates a SQL query based on the message
-func (p *DatabaseProviderImpl) GenerateQuery(ctx context.Context, message string) (string, error) {
+func (p *DatabaseProviderImpl) GenerateQuery(ctx context.Context, prompt string) (string, error) {
 	// Create completion request
 	request := llm.CompletionRequest{
 		Model: p.model,
 		Messages: []llm.Message{
 			{
-				Role: "system",
-				Content: `You are an expert SQL query generator for Ethereum blockchain data analysis. 
-				Generate only valid SQL queries based on user requests. 
-				Return ONLY the SQL query, no other text.
-				The query must:
-				1. Use proper table names (eth.transactions or eth.token_transfers)
-				2. Be properly formatted on a single line`,
+				Role:    "system",
+				Content: "You are a SQL query generator. Generate only the SQL query without any explanation.",
 			},
 			{
 				Role:    "user",
-				Content: message,
+				Content: prompt,
 			},
 		},
 	}
 
-	// Call LLM with retry
 	var response string
 	var lastErr error
-	maxRetries := 3
 
 	for i := 0; i < maxRetries; i++ {
-		if i > 0 {
-			logger.GetLogger().With(
-				zap.Int("retry", i),
-				zap.Error(lastErr),
-			).Info("Retrying query generation")
-
-			// Exponential backoff
-			backoff := time.Duration(i*i) * 5 * time.Second
-			if backoff > 30*time.Second {
-				backoff = 30 * time.Second
-			}
-			time.Sleep(backoff)
-		}
-
-		// Create context with timeout
-		timeoutCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+		timeoutCtx, cancel := context.WithTimeout(ctx, requestTimeout)
 		defer cancel()
 
-		response, lastErr = p.LLMClient.CreateCompletion(timeoutCtx, request)
+		response, lastErr = p.llmClient.CreateCompletion(timeoutCtx, request)
 		if lastErr == nil {
 			break
+		}
+
+		if i < maxRetries-1 {
+			time.Sleep(time.Duration(i+1) * time.Second)
 		}
 	}
 
@@ -203,29 +180,11 @@ func (p *DatabaseProviderImpl) GenerateQuery(ctx context.Context, message string
 		return "", fmt.Errorf("failed to generate query after %d retries: %w", maxRetries, lastErr)
 	}
 
-	// Extract and format SQL query
+	// Extract SQL query from response
 	query := p.extractSQLQuery(response)
 	if query == "" {
 		return "", fmt.Errorf("no valid SQL query found in response")
 	}
-
-	logger.GetLogger().With(
-		zap.String("query", query),
-	).Info("Successfully extracted SQL")
-
-	// Basic SQL injection prevention
-	if strings.Contains(strings.ToUpper(query), "DROP") ||
-		strings.Contains(strings.ToUpper(query), "DELETE") ||
-		strings.Contains(strings.ToUpper(query), "UPDATE") ||
-		strings.Contains(strings.ToUpper(query), "INSERT") ||
-		strings.Contains(strings.ToUpper(query), "ALTER") ||
-		strings.Contains(strings.ToUpper(query), "CREATE") {
-		return "", fmt.Errorf("invalid query generated: contains forbidden keywords")
-	}
-
-	logger.GetLogger().With(
-		zap.String("query", query),
-	).Info("Successfully generated SQL query")
 
 	return query, nil
 }
@@ -262,21 +221,30 @@ func (p *DatabaseProviderImpl) extractSQLQuery(response string) string {
 }
 
 // ExecuteQuery executes a SQL query and returns the result
-func (p *DatabaseProviderImpl) ExecuteQuery(ctx context.Context, sql string) (*actions.TransactionQueryResult, error) {
+func (p *DatabaseProviderImpl) ExecuteQuery(ctx context.Context, query string) (*types.TransactionQueryResult, error) {
+	// Validate API URL and auth token
+	if p.apiURL == "" {
+		return nil, fmt.Errorf("API URL is not configured")
+	}
+
+	if p.authToken == "" {
+		return nil, fmt.Errorf("auth token is not configured")
+	}
+
 	// Validate query
-	if sql == "" || len(sql) > 5000 {
+	if query == "" || len(query) > 5000 {
 		return nil, fmt.Errorf("invalid SQL query length")
 	}
 
 	queryType := "transaction"
-	if strings.Contains(strings.ToLower(sql), "token_transfers") {
+	if strings.Contains(strings.ToLower(query), "token_transfers") {
 		queryType = "token"
-	} else if strings.Contains(strings.ToLower(sql), "count") {
+	} else if strings.Contains(strings.ToLower(query), "count") {
 		queryType = "aggregate"
 	}
 
 	// Execute query with retries
-	var apiResponse *APIResponse
+	var apiResponse *types.APIResponse
 	var lastErr error
 	var err error
 	for retries := 0; retries < defaultRetryCount; retries++ {
@@ -290,7 +258,7 @@ func (p *DatabaseProviderImpl) ExecuteQuery(ctx context.Context, sql string) (*a
 			time.Sleep(defaultRetryDelay * time.Duration(retries))
 		}
 
-		apiResponse, err = p.executeAPIRequest(ctx, sql)
+		apiResponse, err = p.executeAPIRequest(ctx, query)
 		if err == nil {
 			break
 		}
@@ -314,7 +282,7 @@ func (p *DatabaseProviderImpl) ExecuteQuery(ctx context.Context, sql string) (*a
 	transformedData := p.TransformAPIResponse(apiResponse)
 
 	// Create result
-	result := &actions.TransactionQueryResult{
+	result := &types.TransactionQueryResult{
 		Success:  true,
 		Data:     transformedData,
 		Analysis: "",
@@ -328,7 +296,7 @@ func (p *DatabaseProviderImpl) ExecuteQuery(ctx context.Context, sql string) (*a
 				Query           string   `json:"query"`
 				ParamValidation []string `json:"paramValidation,omitempty"`
 			} `json:"queryDetails,omitempty"`
-			BlockStats *actions.BlockStats `json:"blockStats,omitempty"`
+			BlockStats *types.BlockStats `json:"blockStats,omitempty"`
 		}{
 			Total:         len(transformedData),
 			QueryTime:     time.Now().Format(time.RFC3339),
@@ -339,7 +307,7 @@ func (p *DatabaseProviderImpl) ExecuteQuery(ctx context.Context, sql string) (*a
 				Query           string   `json:"query"`
 				ParamValidation []string `json:"paramValidation,omitempty"`
 			}{
-				Query: sql,
+				Query: query,
 			},
 		},
 	}
@@ -348,14 +316,14 @@ func (p *DatabaseProviderImpl) ExecuteQuery(ctx context.Context, sql string) (*a
 }
 
 // executeAPIRequest executes the API request with the given SQL query
-func (p *DatabaseProviderImpl) executeAPIRequest(ctx context.Context, sql string) (*APIResponse, error) {
+func (p *DatabaseProviderImpl) executeAPIRequest(ctx context.Context, sql string) (*types.APIResponse, error) {
 	logger.GetLogger().With(
 		zap.String("sql", sql),
-		zap.String("url", p.APIURL),
+		zap.String("url", p.apiURL),
 	).Info("Executing API request")
 
 	// Prepare request
-	url := fmt.Sprintf("%s/sql_query", p.APIURL)
+	url := fmt.Sprintf("%s/sql_query", p.apiURL)
 	body := map[string]string{
 		"sql_content": sql,
 	}
@@ -378,8 +346,8 @@ func (p *DatabaseProviderImpl) executeAPIRequest(ctx context.Context, sql string
 
 	// Set headers
 	req.Header.Set("Content-Type", "application/json")
-	if p.AuthToken != "" {
-		req.Header.Set("Authorization", p.AuthToken)
+	if p.authToken != "" {
+		req.Header.Set("Authorization", p.authToken)
 	}
 
 	// Execute request
@@ -411,7 +379,7 @@ func (p *DatabaseProviderImpl) executeAPIRequest(ctx context.Context, sql string
 	}
 
 	// Parse response
-	var apiResp APIResponse
+	var apiResp types.APIResponse
 	if err := json.Unmarshal(respBody, &apiResp); err != nil {
 		logger.GetLogger().With(
 			zap.Error(err),
@@ -430,7 +398,7 @@ func (p *DatabaseProviderImpl) executeAPIRequest(ctx context.Context, sql string
 }
 
 // TransformAPIResponse transforms the API response into a standard format
-func (p *DatabaseProviderImpl) TransformAPIResponse(apiResp *APIResponse) []interface{} {
+func (p *DatabaseProviderImpl) TransformAPIResponse(apiResp *types.APIResponse) []interface{} {
 	result := make([]interface{}, 0, len(apiResp.Data.Rows))
 
 	for _, row := range apiResp.Data.Rows {
@@ -446,7 +414,7 @@ func (p *DatabaseProviderImpl) TransformAPIResponse(apiResp *APIResponse) []inte
 	return result
 }
 
-func (p *DatabaseProviderImpl) buildAnalysisTemplate(result *actions.TransactionQueryResult) string {
+func (p *DatabaseProviderImpl) buildAnalysisTemplate(result *types.TransactionQueryResult) string {
 	return fmt.Sprintf(`
 Please analyze the provided Ethereum blockchain data and generate a comprehensive analysis report:
 
@@ -467,18 +435,16 @@ Focus on:
 }
 
 func (p *DatabaseProviderImpl) generateAnalysis(ctx context.Context, template string) (string, error) {
-	if p.LLMClient == nil {
+	if p.llmClient == nil {
 		return "", fmt.Errorf("LLM client not initialized")
 	}
 
-	// Create completion request
 	request := llm.CompletionRequest{
 		Model: p.model,
 		Messages: []llm.Message{
 			{
-				Role: "system",
-				Content: `You are an expert blockchain data analyst. Analyze the provided Ethereum transaction data and generate insights.
-Focus on patterns, anomalies, and potential security concerns. Use clear and professional language.`,
+				Role:    "system",
+				Content: "You are a data analyst providing insights from query results.",
 			},
 			{
 				Role:    "user",
@@ -487,19 +453,10 @@ Focus on patterns, anomalies, and potential security concerns. Use clear and pro
 		},
 	}
 
-	// Call LLM
-	response, err := p.LLMClient.CreateCompletion(ctx, request)
-	logger.GetLogger().With(
-		zap.String("response", response),
-	).Info("@@@ Response from LLM")
-
+	response, err := p.llmClient.CreateCompletion(ctx, request)
 	if err != nil {
-		return "", fmt.Errorf("failed to generate analysis: %w", err)
+		return "", fmt.Errorf("failed to analyze results: %w", err)
 	}
-
-	logger.GetLogger().With(
-		zap.Int("response_length", len(response)),
-	).Debug("Generated analysis response")
 
 	return response, nil
 }
@@ -557,4 +514,70 @@ WHERE date >= date_sub(current_date(), 1)
 GROUP BY 1
 ORDER BY 1;
 `
+}
+
+// Type returns the type of the provider
+func (p *DatabaseProviderImpl) Type() string {
+	return "database"
+}
+
+// GetProviderState returns the current state of the provider
+func (p *DatabaseProviderImpl) GetProviderState(ctx context.Context) (*core.ProviderState, error) {
+	state := &core.ProviderState{
+		Name:  p.Name(),
+		Type:  p.Type(),
+		State: "connected", // Default state since we don't maintain persistent connections
+		Metadata: map[string]interface{}{
+			"api_url":     p.apiURL,
+			"chain":       p.chain,
+			"last_query":  p.lastQuery,
+			"query_count": p.queryCount,
+		},
+	}
+
+	return state, nil
+}
+
+// Name returns the name of the provider
+func (p *DatabaseProviderImpl) Name() string {
+	return p.name
+}
+
+func (p *DatabaseProviderImpl) AnalyzeResults(ctx context.Context, results interface{}) (string, error) {
+	// Convert results to JSON for analysis
+	resultsJSON, err := json.Marshal(results)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal results: %w", err)
+	}
+
+	// Create analysis prompt
+	prompt := fmt.Sprintf(`Analyze the following query results and provide insights:
+Results: %s
+
+Please provide:
+1. Summary of the data
+2. Key patterns or trends
+3. Notable anomalies
+4. Recommendations based on the data`, string(resultsJSON))
+
+	request := llm.CompletionRequest{
+		Model: p.model,
+		Messages: []llm.Message{
+			{
+				Role:    "system",
+				Content: "You are a data analyst providing insights from query results.",
+			},
+			{
+				Role:    "user",
+				Content: prompt,
+			},
+		},
+	}
+
+	response, err := p.llmClient.CreateCompletion(ctx, request)
+	if err != nil {
+		return "", fmt.Errorf("failed to analyze results: %w", err)
+	}
+
+	return response, nil
 }
