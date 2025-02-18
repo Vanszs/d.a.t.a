@@ -69,7 +69,20 @@ func (m *managerImpl) SetMemory(ctx context.Context, mem *Memory) error {
 
 // GetState is a generic function to retrieve any type of state
 func (m *managerImpl) ListMemories(ctx context.Context, filter MemoryFilter) ([]*Memory, error) {
-	return nil, nil
+	memories, err := m.store.GetAll(ctx, "memory")
+	if err != nil {
+		return nil, err
+	}
+
+	memoryList := make([]*Memory, len(memories))
+	for i, memory := range memories {
+		memoryList[i] = &Memory{
+			MemoryID:  memory["id"].(string),
+			CreatedAt: memory["created_at"].(time.Time),
+			Content:   memory["content"].([]byte),
+		}
+	}
+	return memoryList, nil
 }
 
 // GetState is a generic function to retrieve any type of state
