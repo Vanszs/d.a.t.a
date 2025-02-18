@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"strings"
 
 	"github.com/carv-protocol/d.a.t.a/src/pkg/carv"
@@ -44,6 +45,20 @@ type Config struct {
 	} `mapstructure:"token"`
 
 	Wallet wallet.Config `mapstructure:"wallet"`
+
+	Plugin struct {
+		Plugins map[string]PluginConfig `mapstructure:"plugins"`
+	} `mapstructure:"plugin"`
+}
+
+type PluginConfig struct {
+	Name         string                 `mapstructure:"name"`
+	Enabled      bool                   `mapstructure:"enabled"`
+	Version      string                 `mapstructure:"version"`
+	Author       string                 `mapstructure:"author"`
+	Description  string                 `mapstructure:"description"`
+	Dependencies []string               `mapstructure:"dependencies"`
+	Options      map[string]interface{} `mapstructure:"options"`
 }
 
 func setDefaultConfig() {
@@ -52,8 +67,9 @@ func setDefaultConfig() {
 	viper.SetDefault("social.twitter.mode", "api")
 	viper.SetDefault("llm_config.provider", "openai")
 	viper.SetDefault("llm_config.base_url", "https://api.openai.com/v1")
-	viper.SetDefault("llm_config.model", "gpt-4o") // Default model for OpenAI
-	viper.SetDefault("shutdown_timeout", 30)       // shutdown timeout in seconds
+	viper.SetDefault("llm_config.model", "gpt-4o")                // Default model for OpenAI
+	viper.SetDefault("shutdown_timeout", 30)                      // shutdown timeout in seconds
+	viper.SetDefault("plugin.plugins", map[string]PluginConfig{}) // Default empty plugins map
 }
 
 func loadEnvConfig() error {
@@ -138,6 +154,9 @@ func loadConfig() (*Config, error) {
 		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
 			return nil, fmt.Errorf("error reading config file: %w", err)
 		}
+		log.Printf("No config file found, using defaults")
+	} else {
+		log.Printf("Loaded config from file: %s", viper.ConfigFileUsed())
 	}
 
 	// Load environment variables
