@@ -1,0 +1,87 @@
+package web
+
+import (
+	"context"
+	"github.com/carv-protocol/d.a.t.a/src/pkg/logger"
+	"github.com/gin-gonic/gin"
+	"net"
+	"net/http"
+	"net/http/httputil"
+	"os"
+	"runtime/debug"
+	"strconv"
+	"strings"
+	"time"
+)
+
+var (
+	server *http.Server
+)
+
+func Start(port int) {
+	server = newServer(port)
+	go func() {
+		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			logger.GetLogger().Fatalf("listen err: %v", err)
+		}
+	}()
+}
+
+func Stop() {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+
+	if err := server.Shutdown(ctx); err != nil {
+		logger.GetLogger().Errorf("[web] api svr shutdown err: %v", err)
+	}
+}
+
+func newServer(port int) *http.Server {
+
+	gin.SetMode(gin.DebugMode)
+
+	r := gin.Default()
+	r.Use(GinRecovery(true))
+
+	r.Any("/talk", Talk)
+	r.GET("/healthy", Healthy)
+	r.GET("/are/you/ready", AreYouReady)
+
+	return &http.Server{
+		Addr:    ":" + strconv.Itoa(port),
+		Handler: r,
+	}
+}
+
+func GinRecovery(stack bool) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		defer func() {
+			if err := recover(); err != nil {
+				var brokenPipe bool
+				if ne, ok := err.(*net.OpError); ok {
+					if se, ok := ne.Err.(*os.SyscallError); ok {
+						if strings.Contains(strings.ToLower(se.Error()), "broken pipe") || strings.Contains(strings.ToLower(se.Error()), "connection reset by peer") {
+							brokenPipe = true
+						}
+					}
+				}
+
+				httpRequest, _ := httputil.DumpRequest(c.Request, false)
+				if brokenPipe {
+					logger.GetLogger().Errorf("%v %v %v %v %v (%v)", c.Writer.Status(), c.Request.Method, c.Request.URL.RequestURI(), "", c.Request.UserAgent(), c.ClientIP())
+					c.Error(err.(error))
+					c.Abort()
+					return
+				}
+
+				if stack {
+					logger.GetLogger().Errorf("[Recovery from panic]\n%v%v\n%v", string(httpRequest), err, string(debug.Stack()))
+				} else {
+					logger.GetLogger().Errorf("[Recovery from panic]\n%v%v", string(httpRequest), err)
+				}
+				c.AbortWithStatus(http.StatusInternalServerError)
+			}
+		}()
+		c.Next()
+	}
+}

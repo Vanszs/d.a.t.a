@@ -27,7 +27,7 @@ type managerImpl struct {
 }
 
 func NewManager(store database.Store) *managerImpl {
-	store.CreateTable(context.Background(), "memory", "id TEXT PRIMARY KEY, created_at TIMESTAMP, content BLOB")
+	store.CreateTable(context.Background(), "memory", "id TEXT PRIMARY KEY, created_at TIMESTAMP, content Text")
 	return &managerImpl{
 		store: store,
 	}
@@ -55,7 +55,7 @@ func (m *managerImpl) GetMemory(ctx context.Context, memoryID string) (*Memory, 
 	return &Memory{
 		MemoryID:  mem["id"].(string),
 		CreatedAt: mem["created_at"].(time.Time),
-		Content:   mem["content"].([]byte),
+		Content:   []byte(mem["content"].(string)),
 	}, nil
 }
 
@@ -69,20 +69,7 @@ func (m *managerImpl) SetMemory(ctx context.Context, mem *Memory) error {
 
 // GetState is a generic function to retrieve any type of state
 func (m *managerImpl) ListMemories(ctx context.Context, filter MemoryFilter) ([]*Memory, error) {
-	memories, err := m.store.GetAll(ctx, "memory")
-	if err != nil {
-		return nil, err
-	}
-
-	memoryList := make([]*Memory, len(memories))
-	for i, memory := range memories {
-		memoryList[i] = &Memory{
-			MemoryID:  memory["id"].(string),
-			CreatedAt: memory["created_at"].(time.Time),
-			Content:   memory["content"].([]byte),
-		}
-	}
-	return memoryList, nil
+	return nil, nil
 }
 
 // GetState is a generic function to retrieve any type of state

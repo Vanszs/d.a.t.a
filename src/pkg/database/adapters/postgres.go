@@ -17,26 +17,7 @@ type PostgresStore struct {
 	retryDelay time.Duration
 }
 
-type PostgresConfig struct {
-	Host     string
-	Port     int
-	User     string
-	Password string
-	DBName   string
-	SSLMode  string
-}
-
-func NewPostgresStore(config PostgresConfig) *PostgresStore {
-	connStr := fmt.Sprintf(
-		"host=%s port=%d user=%s password=%s dbname=%s sslmode=%s",
-		config.Host,
-		config.Port,
-		config.User,
-		config.Password,
-		config.DBName,
-		config.SSLMode,
-	)
-
+func NewPostgresStore(connStr string) *PostgresStore {
 	return &PostgresStore{
 		connStr:    connStr,
 		maxRetries: 3,
@@ -126,7 +107,6 @@ func (s *PostgresStore) Insert(ctx context.Context, tableName string, data map[s
 	paramCount := 1
 
 	for col, val := range data {
-		col = sanitizeIdentifier(col)
 		if col != "" {
 			columns = append(columns, col)
 			placeholders = append(placeholders, fmt.Sprintf("$%d", paramCount))
@@ -184,7 +164,6 @@ func (s *PostgresStore) Update(ctx context.Context, tableName string, id string,
 	paramCount := 1
 
 	for col, val := range data {
-		col = sanitizeIdentifier(col)
 		if col != "" {
 			setStatements = append(setStatements, fmt.Sprintf("%s = $%d", col, paramCount))
 			values = append(values, val)
@@ -278,6 +257,49 @@ func (s *PostgresStore) Delete(ctx context.Context, tableName string, id string)
 	return tx.Commit()
 }
 
+func (s *PostgresStore) Get(ctx context.Context, tableName string, id string) (map[string]interface{}, error) {
+	if s.db == nil {
+		return nil, fmt.Errorf("database connection not established")
+	}
+
+	tableName = sanitizeIdentifier(tableName)
+	if tableName == "" {
+		return nil, fmt.Errorf("invalid table name")
+	}
+	if id == "" {
+		return nil, fmt.Errorf("invalid id")
+	}
+
+	query := fmt.Sprintf("SELECT * FROM %s WHERE id = $1", tableName)
+
+	result, err := s.db.QueryContext(ctx, query, id)
+	if err != nil {
+		return nil, nil
+		//return nil, fmt.Errorf("failed to query data from %s: %w", tableName, err)
+	}
+
+	if !result.Next() {
+		return nil, nil
+	}
+
+	var (
+		ID        string
+		CreatedAt time.Time
+		Content   string
+	)
+
+	err = result.Scan(&ID, &CreatedAt, &Content)
+	if err != nil {
+		return nil, fmt.Errorf("failed to scan data from %s: %w", tableName, err)
+	}
+
+	return map[string]interface{}{
+		"id":         ID,
+		"content":    Content,
+		"created_at": CreatedAt,
+	}, nil
+}
+
 // Close closes the database connection
 func (s *PostgresStore) Close() error {
 	if s.db != nil {
@@ -306,7 +328,6 @@ func (s *PostgresStore) CreateIndex(ctx context.Context, tableName string, index
 	// Clean column names
 	var cleanColumns []string
 	for _, col := range columns {
-		col = sanitizeIdentifier(col)
 		if col != "" {
 			cleanColumns = append(cleanColumns, col)
 		}
@@ -356,6 +377,7 @@ func (s *PostgresStore) Query(ctx context.Context, query string, args ...interfa
 // Helper functions
 
 func sanitizeIdentifier(identifier string) string {
+	return "data_framework." + identifier
 	// Remove any characters that aren't alphanumeric or underscores
 	cleaned := strings.Map(func(r rune) rune {
 		if (r >= 'a' && r <= 'z') ||

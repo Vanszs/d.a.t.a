@@ -2,13 +2,12 @@ package main
 
 import (
 	"fmt"
-	"strings"
-
 	"github.com/carv-protocol/d.a.t.a/src/pkg/carv"
 	"github.com/carv-protocol/d.a.t.a/src/pkg/clients"
 	"github.com/carv-protocol/d.a.t.a/src/pkg/llm"
 	"github.com/carv-protocol/d.a.t.a/src/tools/wallet"
 	"github.com/spf13/viper"
+	"strings"
 )
 
 type Config struct {
@@ -44,6 +43,10 @@ type Config struct {
 	} `mapstructure:"token"`
 
 	Wallet wallet.Config `mapstructure:"wallet"`
+
+	Web struct {
+		Port int `mapstructure:"port"`
+	} `mapstructure:"web"`
 }
 
 func setDefaultConfig() {
@@ -53,43 +56,8 @@ func setDefaultConfig() {
 	viper.SetDefault("llm_config.base_url", "https://api.openai.com/v1")
 	viper.SetDefault("llm_config.model", "gpt-4o") // Default model for OpenAI
 	viper.SetDefault("shutdown_timeout", 30)       // shutdown timeout in seconds
-}
 
-func loadEnvConfig() error {
-	viper.SetConfigName(".env")
-	viper.SetConfigType("env")
-	viper.AddConfigPath("./src")
-
-	if err := viper.MergeInConfig(); err != nil {
-		return fmt.Errorf("error reading .env: %w", err)
-	}
-
-	// Map environment variables to config
-	envMappings := map[string]string{
-		"LLM_PROVIDER":           "llm_config.provider",
-		"LLM_API_KEY":            "llm_config.api_key",
-		"TWITTER_BEARER_TOKEN":   "social.twitter.bearer_token",
-		"TWITTER_API_KEY":        "social.twitter.api_key",
-		"TWITTER_API_KEY_SECRET": "social.twitter.api_key_secret",
-		"TWITTER_ACCESS_TOKEN":   "social.twitter.access_token",
-		"TWITTER_TOKEN_SECRET":   "social.twitter.token_secret",
-		"TWITTER_MONITOR_WINDOW": "social.twitter.monitor_window",
-		"DISCORD_API_TOKEN":      "social.discord.api_token",
-		"TELEGRAM_BOT_TOKEN":     "social.telegram.bot_token",
-		"CARV_DATA_BASE_URL":     "data.carv.base_url",
-		"CARV_DATA_API_KEY":      "data.carv.api_key",
-		"WALLET_PRIVATE_KEY":     "wallet.private_key",
-	}
-
-	// override config values with environment variables
-	for env, conf := range envMappings {
-		viper.Set(conf, viper.Get(env))
-	}
-
-	// Set provider-specific defaults if not already set
-	provider := viper.GetString("llm_config.provider")
-
-	switch provider {
+	switch viper.GetString("llm_config.provider") {
 	case "deepseek":
 		if !viper.IsSet("llm_config.base_url") {
 			viper.Set("llm_config.base_url", "https://api.deepseek.com")
@@ -110,18 +78,12 @@ func loadEnvConfig() error {
 	if channelID := viper.GetString("TELEGRAM_CHANNEL_ID"); channelID != "" {
 		viper.Set("social.telegram.channel_id", strings.Trim(channelID, "${}"))
 	}
-
-	return nil
 }
 
 // loadConfig loads and validates the application configuration
-func loadConfig() (*Config, error) {
+func loadConfig(confPath string) (*Config, error) {
 	// Set default configuration paths
-	configPaths := []string{
-		"./src/config",
-		".",
-		"./config",
-	}
+	configPaths := []string{confPath}
 
 	viper.SetConfigName("config")
 	viper.SetConfigType("yaml")
@@ -137,11 +99,6 @@ func loadConfig() (*Config, error) {
 		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
 			return nil, fmt.Errorf("error reading config file: %w", err)
 		}
-	}
-
-	// Load environment variables
-	if err := loadEnvConfig(); err != nil {
-		return nil, fmt.Errorf("error loading environment config: %w", err)
 	}
 
 	var conf Config

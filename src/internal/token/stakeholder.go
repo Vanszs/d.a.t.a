@@ -52,11 +52,14 @@ func (sm *StakeholderManager) FetchOrCreateStakeholder(
 		if err != nil {
 			return nil, err
 		}
-		sm.memoryManager.CreateMemory(ctx, memory.Memory{
+		err = sm.memoryManager.CreateMemory(ctx, memory.Memory{
 			MemoryID:  key,
 			CreatedAt: time.Now(),
 			Content:   res,
 		})
+		if err != nil {
+			return nil, err
+		}
 	} else {
 		err = json.Unmarshal(mem.Content, &stakeholder)
 		if err != nil {
