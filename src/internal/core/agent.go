@@ -437,7 +437,7 @@ func NewAgent(config AgentConfig) (*Agent, error) {
 	agent := &Agent{
 		ID:             config.ID,
 		character:      config.Character,
-		cognitive:      NewCognitiveEngine(config.LLMClient, config.Model, config.Character, sugar),
+		cognitive:      NewCognitiveEngine(config.LLMClient, config.Model, config.Character, sugar, config.PromptTemplates),
 		taskManager:    config.TaskManager,
 		actionManager:  config.ActionManager,
 		logger:         sugar,

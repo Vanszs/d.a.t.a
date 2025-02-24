@@ -29,12 +29,13 @@ const (
 )
 
 type CognitiveEngine struct {
-	llm           llm.Client
-	model         string
-	maxSteps      int
-	minConfidence float64
-	character     *characters.Character
-	logger        *zap.SugaredLogger
+	llm             llm.Client
+	model           string
+	maxSteps        int
+	minConfidence   float64
+	character       *characters.Character
+	logger          *zap.SugaredLogger
+	promptTemplates *PromptTemplates
 }
 
 type CognitiveConfig struct {
@@ -70,14 +71,21 @@ type ThoughtStep struct {
 	Timestamp            time.Time
 }
 
-func NewCognitiveEngine(llmClient llm.Client, model string, character *characters.Character, logger *zap.SugaredLogger) *CognitiveEngine {
+func NewCognitiveEngine(
+	llmClient llm.Client,
+	model string,
+	character *characters.Character,
+	logger *zap.SugaredLogger,
+	promptTemplates *PromptTemplates,
+) *CognitiveEngine {
 	return &CognitiveEngine{
-		llm:           llmClient,
-		model:         model,
-		maxSteps:      3,
-		minConfidence: 0.7,
-		character:     character,
-		logger:        logger,
+		llm:             llmClient,
+		model:           model,
+		maxSteps:        3,
+		minConfidence:   0.7,
+		character:       character,
+		logger:          logger,
+		promptTemplates: promptTemplates,
 	}
 }
 
@@ -204,7 +212,7 @@ func (e *CognitiveEngine) GenerateActions(
 		state,
 		actionContext,
 		state.StakeholderPreferences,
-		generateActionsPromptFunc(state, task, state.AvailableActions),
+		generateActionsPromptFunc(state, task, state.AvailableActions, e.promptTemplates),
 	)
 	if err != nil {
 		return nil, err
@@ -236,7 +244,7 @@ func (e *CognitiveEngine) GenerateTasks(
 		state,
 		taskContext,
 		state.StakeholderPreferences,
-		generateTasksPromptFunc(state))
+		generateTasksPromptFunc(state, e.promptTemplates))
 	if err != nil {
 		return nil, err
 	}
@@ -265,7 +273,7 @@ func (e *CognitiveEngine) generateThoughtStep(
 	response, err := e.llm.CreateCompletion(ctx, llm.CompletionRequest{
 		Model: e.model,
 		Messages: []llm.Message{
-			{Role: "system", Content: buildSystemPrompt(state, nil)},
+			{Role: "system", Content: buildSystemPrompt(state, nil, e.promptTemplates)},
 			{Role: "user", Content: prompt},
 		},
 	})
@@ -412,14 +420,14 @@ func (e *CognitiveEngine) processMessage(
 	msg *SocialMessage,
 	stakeholder *Stakeholder,
 ) (*ProcessedMessage, error) {
-	prompt := buildMessagePrompt(state, msg, stakeholder)
+	prompt := buildMessagePrompt(state, msg, stakeholder, e.promptTemplates)
 	// Get LLM's analysis
 	response, err := e.llm.CreateCompletion(ctx, llm.CompletionRequest{
 		Model: e.model,
 		Messages: []llm.Message{
 			{
 				Role:    "system",
-				Content: buildSystemPrompt(state, stakeholder),
+				Content: buildSystemPrompt(state, stakeholder, e.promptTemplates),
 			},
 			{
 				Role:    "user",
@@ -442,11 +450,11 @@ func (e *CognitiveEngine) generateActionParameters(
 	stakeholder *Stakeholder,
 	action actions.IAction,
 ) (map[string]interface{}, error) {
-	prompt := generateActionParametersPrompt(state, msg, stakeholder, action)
+	prompt := generateActionParametersPrompt(state, msg, stakeholder, action, e.promptTemplates)
 	response, err := e.llm.CreateCompletion(ctx, llm.CompletionRequest{
 		Model: e.model,
 		Messages: []llm.Message{
-			{Role: "system", Content: buildSystemPrompt(state, stakeholder)},
+			{Role: "system", Content: buildSystemPrompt(state, stakeholder, e.promptTemplates)},
 			{Role: "user", Content: prompt},
 		},
 	})

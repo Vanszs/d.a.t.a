@@ -100,6 +100,11 @@ func initializeAgent(ctx context.Context, config *Config) (*core.Agent, error) {
 		return nil, fmt.Errorf("failed to register plugins: %w", err)
 	}
 
+	promptTemplates := config.UserTemplates
+	if config.UserTemplates == nil {
+		promptTemplates = config.DefaultTemplates
+	}
+
 	// Create agent
 	agentConfig := core.AgentConfig{
 		ID:           uuid.New(),
@@ -113,10 +118,11 @@ func initializeAgent(ctx context.Context, config *Config) (*core.Agent, error) {
 			&config.Social.DiscordConfig,
 			&config.Social.TelegramConfig,
 		),
-		TaskManager:    tasks.NewManager(tasks.NewTaskStore(store)),
-		ActionManager:  actionManager,
-		TokenManager:   tokenManager,
-		PluginRegistry: pluginRegistry,
+		PromptTemplates: promptTemplates,
+		TaskManager:     tasks.NewManager(tasks.NewTaskStore(store)),
+		ActionManager:   actionManager,
+		TokenManager:    tokenManager,
+		PluginRegistry:  pluginRegistry,
 	}
 
 	agent, err := core.NewAgent(agentConfig)

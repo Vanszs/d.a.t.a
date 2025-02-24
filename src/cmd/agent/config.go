@@ -5,6 +5,7 @@ import (
 	"log"
 	"strings"
 
+	"github.com/carv-protocol/d.a.t.a/src/internal/core"
 	"github.com/carv-protocol/d.a.t.a/src/pkg/carv"
 	"github.com/carv-protocol/d.a.t.a/src/pkg/clients"
 	"github.com/carv-protocol/d.a.t.a/src/pkg/llm"
@@ -45,6 +46,9 @@ type Config struct {
 	} `mapstructure:"token"`
 
 	Wallet wallet.Config `mapstructure:"wallet"`
+
+	UserTemplates    *core.PromptTemplates `mapstructure:"user_templates"`
+	DefaultTemplates *core.PromptTemplates `mapstructure:"default_templates"`
 
 	Plugin struct {
 		Plugins map[string]PluginConfig `mapstructure:"plugins"`
@@ -169,12 +173,47 @@ func loadConfig() (*Config, error) {
 		return nil, fmt.Errorf("error unmarshaling config: %w", err)
 	}
 
+	// Check if user templates are defined, if not load default templates
+	if conf.UserTemplates == nil {
+		log.Printf("User templates not defined, loading default templates")
+		defaultTemplates, err := loadDefaultTemplates(configPaths)
+		if err != nil {
+			return nil, fmt.Errorf("failed to load default templates: %w", err)
+		}
+		conf.DefaultTemplates = defaultTemplates
+		conf.UserTemplates = conf.DefaultTemplates
+	} else {
+		log.Printf("Using user-defined templates")
+	}
+
 	// Validate config
 	if err := validateConfig(&conf); err != nil {
 		return nil, fmt.Errorf("config validation failed: %w", err)
 	}
 
 	return &conf, nil
+}
+
+// loadDefaultTemplates loads templates from default_templates.yaml
+func loadDefaultTemplates(configPaths []string) (*core.PromptTemplates, error) {
+	defaultViper := viper.New()
+	defaultViper.SetConfigName("default_templates")
+	defaultViper.SetConfigType("yaml")
+
+	for _, path := range configPaths {
+		defaultViper.AddConfigPath(path)
+	}
+
+	if err := defaultViper.ReadInConfig(); err != nil {
+		return nil, fmt.Errorf("error reading default templates: %w", err)
+	}
+
+	var defaultTemplates core.PromptTemplates
+	if err := defaultViper.UnmarshalKey("default_templates", &defaultTemplates); err != nil {
+		return nil, fmt.Errorf("error unmarshaling default templates: %w", err)
+	}
+
+	return &defaultTemplates, nil
 }
 
 func validateConfig(conf *Config) error {
@@ -190,5 +229,9 @@ func validateConfig(conf *Config) error {
 	if conf.Database.Path == "" {
 		return ErrInvalidDBConfig
 	}
+	if conf.DefaultTemplates == nil && conf.UserTemplates == nil {
+		return fmt.Errorf("missing prompt templates")
+	}
+
 	return nil
 }
