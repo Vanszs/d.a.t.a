@@ -13,18 +13,19 @@ import (
 
 // AgentConfig represents the configuration for creating a new agent
 type AgentConfig struct {
-	ID             uuid.UUID
-	Character      *characters.Character
-	LLMClient      llm.Client
-	Model          string
-	TaskManager    TaskManager
-	ActionManager  actions.ActionManager
-	ToolsManager   ToolManager
-	Stakeholders   StakeholderManager
-	TokenManager   TokenManager
-	SocialClient   SocialClient
-	PluginRegistry *pluginCore.Registry
-	Training       struct {
+	ID              uuid.UUID
+	Character       *characters.Character
+	LLMClient       llm.Client
+	Model           string
+	TaskManager     TaskManager
+	ActionManager   actions.ActionManager
+	ToolsManager    ToolManager
+	Stakeholders    StakeholderManager
+	TokenManager    TokenManager
+	SocialClient    SocialClient
+	PromptTemplates *PromptTemplates
+	PluginRegistry  *pluginCore.Registry
+	Training        struct {
 		Enabled       bool
 		MaxIterations int
 		BatchSize     int
