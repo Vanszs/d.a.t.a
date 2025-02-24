@@ -91,6 +91,6 @@ DATA_AUTH_TOKEN=your_auth_token
 ## 📮 Contact & Support
 
 - [GitHub Issues](https://github.com/carv-protocol/d.a.t.a/issues)
-- [Discord Community](http://discord.gg/AYyfmhMn5K)
+- [Discord Community](https://discord.gg/gjK2BJhHWN)
 - [Documentation](https://docs.carv.io/d.a.t.a.-ai-framework/introduction)
 - Email: developer@carv.io
