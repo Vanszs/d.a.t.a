@@ -56,3 +56,21 @@ social:
   bot_token: ""
   channel_id: 0
   debug: false
+
+plugin:
+  plugins:
+    d.a.t.a:
+      name: "d.a.t.a"
+      enabled: true
+      version: "1.0.0"
+      author: "CARV Protocol"
+      description: "Core data interaction plugin for Ethereum blockchain analysis"
+      dependencies: []
+      options:
+        api_url: "your-api-url-here"
+        auth_token: "your-auth-token-here"
+        chain: "ethereum-mainnet"
+        llm:
+          model: "deepseek-chat"
+          max_tokens: 2000
+          temperature: 0.7

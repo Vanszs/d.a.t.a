@@ -9,25 +9,27 @@ import (
 
 	"github.com/carv-protocol/d.a.t.a/src/characters"
 	"github.com/carv-protocol/d.a.t.a/src/internal/actions"
+	pluginCore "github.com/carv-protocol/d.a.t.a/src/plugins/core"
 
 	"github.com/google/uuid"
 	"go.uber.org/zap"
 )
 
 type Agent struct {
-	ID            uuid.UUID
-	cognitive     *CognitiveEngine
-	character     *characters.Character
-	taskManager   TaskManager
-	actionManager actions.ActionManager
-	logger        *zap.SugaredLogger
-	toolManager   ToolManager
-	stakeholders  StakeholderManager
-	TokenManager  TokenManager
-	socialClient  SocialClient
-	Goals         []Goal
-	ctx           context.Context
-	cancel        context.CancelFunc
+	ID             uuid.UUID
+	cognitive      *CognitiveEngine
+	character      *characters.Character
+	taskManager    TaskManager
+	actionManager  actions.ActionManager
+	logger         *zap.SugaredLogger
+	toolManager    ToolManager
+	stakeholders   StakeholderManager
+	TokenManager   TokenManager
+	socialClient   SocialClient
+	pluginRegistry *pluginCore.Registry
+	Goals          []Goal
+	ctx            context.Context
+	cancel         context.CancelFunc
 }
 
 // SystemState represents the complete state of the agent system
@@ -48,6 +50,7 @@ type SystemState struct {
 	ActiveTasks     []*Task
 	PendingActions  []actions.IAction
 	NativeTokenInfo *TokenInfo
+	ProviderStates  []*pluginCore.ProviderState
 }
 
 type Goal struct {
@@ -161,15 +164,52 @@ func (a *Agent) getCurrentState() *SystemState {
 	nativeToken, _ := a.TokenManager.NativeTokenInfo(a.ctx)
 	tasks, _ := a.taskManager.GetTasks(a.ctx)
 
+	// Get plugin actions and provider states
+	var pluginActions []actions.IAction
+	var providerStates []*pluginCore.ProviderState
+
+	if a.pluginRegistry != nil {
+		// Collect actions from plugins
+		for _, plugin := range a.pluginRegistry.GetPlugins() {
+			for _, action := range plugin.Actions() {
+				adapter := pluginCore.NewActionAdapter(a.ctx, action)
+				pluginActions = append(pluginActions, adapter)
+			}
+		}
+
+		// Collect provider states
+		for _, provider := range a.pluginRegistry.GetProviders() {
+			if state, err := provider.GetProviderState(a.ctx); err == nil {
+				providerStates = append(providerStates, state)
+			} else {
+				a.logger.Warnw("Failed to get provider state",
+					"provider", provider.Name(),
+					"error", err,
+				)
+			}
+		}
+	}
+
+	// print all available actions
+	for _, action := range pluginActions {
+		a.logger.Infof("Available action: %s", action.Name())
+	}
+
+	// print all provider states
+	for _, state := range providerStates {
+		a.logger.Infof("Provider state: %+v", state)
+	}
+
 	return &SystemState{
 		Character:              a.character,
 		AvailableTools:         a.toolManager.AvailableTools(),
-		AvailableActions:       a.toolManager.AvailableActions(),
+		AvailableActions:       append(a.toolManager.AvailableActions(), pluginActions...),
 		Timestamp:              time.Now(),
 		AgentStates:            a.GetState(),
 		StakeholderPreferences: pref,
 		ActiveTasks:            tasks,
 		NativeTokenInfo:        nativeToken,
+		ProviderStates:         providerStates,
 	}
 }
 
@@ -292,13 +332,34 @@ func (a *Agent) processMessage(msg *SocialMessage) error {
 
 	if processedMsg.ShouldGenerateAction {
 		for _, action := range processedMsg.Actions {
-			action, err := a.toolManager.GetAction(action.ActionType, action.ActionName)
+			var actionImpl actions.IAction
+			actionImpl, err := a.toolManager.GetAction(action.ActionType, action.ActionName)
 			if err != nil {
-				a.logger.Errorw("Error getting action", "error", err)
-				return err
+				// If action not found in toolManager, try to find it in pluginRegistry
+				if a.pluginRegistry != nil {
+					for _, plugin := range a.pluginRegistry.GetPlugins() {
+						for _, pluginAction := range plugin.Actions() {
+							if pluginAction.Type() == action.ActionType && pluginAction.Name() == action.ActionName {
+								actionImpl = pluginCore.NewActionAdapter(a.ctx, pluginAction)
+								break
+							}
+						}
+						if actionImpl != nil {
+							break
+						}
+					}
+				}
+
+				if actionImpl == nil {
+					a.logger.Errorw("Error getting action", "error", err)
+					return err
+				}
+				a.logger.Infof("Action found in pluginRegistry: %s", actionImpl.Name())
+			} else {
+				a.logger.Infof("Action found in toolManager: %s", actionImpl.Name())
 			}
 
-			params, err := a.cognitive.generateActionParameters(a.ctx, state, msg, stakeholder, action)
+			params, err := a.cognitive.generateActionParameters(a.ctx, state, msg, stakeholder, actionImpl)
 			if err != nil {
 				a.logger.Errorw("Error generating action parameters", "error", err)
 				return err
@@ -311,7 +372,7 @@ func (a *Agent) processMessage(msg *SocialMessage) error {
 				continue
 			}
 
-			if err = a.executeAction(a.ctx, action, params); err != nil {
+			if err = a.executeAction(a.ctx, actionImpl, params); err != nil {
 				a.logger.Errorw("Error executing action", "error", err)
 				return err
 			}
@@ -366,18 +427,19 @@ func NewAgent(config AgentConfig) (*Agent, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	agent := &Agent{
-		ID:            config.ID,
-		character:     config.Character,
-		cognitive:     NewCognitiveEngine(config.LLMClient, config.Model, config.Character, sugar),
-		taskManager:   config.TaskManager,
-		actionManager: config.ActionManager,
-		logger:        sugar,
-		toolManager:   config.ToolsManager,
-		stakeholders:  config.Stakeholders,
-		TokenManager:  config.TokenManager,
-		socialClient:  config.SocialClient,
-		ctx:           ctx,
-		cancel:        cancel,
+		ID:             config.ID,
+		character:      config.Character,
+		cognitive:      NewCognitiveEngine(config.LLMClient, config.Model, config.Character, sugar, config.PromptTemplates),
+		taskManager:    config.TaskManager,
+		actionManager:  config.ActionManager,
+		logger:         sugar,
+		toolManager:    config.ToolsManager,
+		stakeholders:   config.Stakeholders,
+		TokenManager:   config.TokenManager,
+		socialClient:   config.SocialClient,
+		pluginRegistry: config.PluginRegistry,
+		ctx:            ctx,
+		cancel:         cancel,
 	}
 
 	return agent, nil

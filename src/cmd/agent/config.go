@@ -2,11 +2,13 @@ package main
 
 import (
 	"fmt"
+	"github.com/carv-protocol/d.a.t.a/src/internal/core"
 	"github.com/carv-protocol/d.a.t.a/src/pkg/carv"
 	"github.com/carv-protocol/d.a.t.a/src/pkg/clients"
 	"github.com/carv-protocol/d.a.t.a/src/pkg/llm"
 	"github.com/carv-protocol/d.a.t.a/src/tools/wallet"
 	"github.com/spf13/viper"
+	"log"
 	"strings"
 )
 
@@ -47,6 +49,23 @@ type Config struct {
 	Web struct {
 		Port int `mapstructure:"port"`
 	} `mapstructure:"web"`
+
+	UserTemplates    *core.PromptTemplates `mapstructure:"user_templates"`
+	DefaultTemplates *core.PromptTemplates `mapstructure:"default_templates"`
+
+	Plugin struct {
+		Plugins map[string]PluginConfig `mapstructure:"plugins"`
+	} `mapstructure:"plugin"`
+}
+
+type PluginConfig struct {
+	Name         string                 `mapstructure:"name"`
+	Enabled      bool                   `mapstructure:"enabled"`
+	Version      string                 `mapstructure:"version"`
+	Author       string                 `mapstructure:"author"`
+	Description  string                 `mapstructure:"description"`
+	Dependencies []string               `mapstructure:"dependencies"`
+	Options      map[string]interface{} `mapstructure:"options"`
 }
 
 func setDefaultConfig() {
@@ -54,8 +73,9 @@ func setDefaultConfig() {
 	viper.SetDefault("database.path", "./data/data.db")
 	viper.SetDefault("llm_config.provider", "openai")
 	viper.SetDefault("llm_config.base_url", "https://api.openai.com/v1")
-	viper.SetDefault("llm_config.model", "gpt-4o") // Default model for OpenAI
-	viper.SetDefault("shutdown_timeout", 30)       // shutdown timeout in seconds
+	viper.SetDefault("llm_config.model", "gpt-4o")                // Default model for OpenAI
+	viper.SetDefault("shutdown_timeout", 30)                      // shutdown timeout in seconds
+	viper.SetDefault("plugin.plugins", map[string]PluginConfig{}) // Default empty plugins map
 
 	switch viper.GetString("llm_config.provider") {
 	case "deepseek":
@@ -99,11 +119,27 @@ func loadConfig(confPath string) (*Config, error) {
 		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
 			return nil, fmt.Errorf("error reading config file: %w", err)
 		}
+		log.Printf("No config file found, using defaults")
+	} else {
+		log.Printf("Loaded config from file: %s", viper.ConfigFileUsed())
 	}
 
 	var conf Config
 	if err := viper.Unmarshal(&conf); err != nil {
 		return nil, fmt.Errorf("error unmarshaling config: %w", err)
+	}
+
+	// Check if user templates are defined, if not load default templates
+	if conf.UserTemplates == nil {
+		log.Printf("User templates not defined, loading default templates")
+		defaultTemplates, err := loadDefaultTemplates(configPaths)
+		if err != nil {
+			return nil, fmt.Errorf("failed to load default templates: %w", err)
+		}
+		conf.DefaultTemplates = defaultTemplates
+		conf.UserTemplates = conf.DefaultTemplates
+	} else {
+		log.Printf("Using user-defined templates")
 	}
 
 	// Validate config
@@ -112,6 +148,28 @@ func loadConfig(confPath string) (*Config, error) {
 	}
 
 	return &conf, nil
+}
+
+// loadDefaultTemplates loads templates from default_templates.yaml
+func loadDefaultTemplates(configPaths []string) (*core.PromptTemplates, error) {
+	defaultViper := viper.New()
+	defaultViper.SetConfigName("default_templates")
+	defaultViper.SetConfigType("yaml")
+
+	for _, path := range configPaths {
+		defaultViper.AddConfigPath(path)
+	}
+
+	if err := defaultViper.ReadInConfig(); err != nil {
+		return nil, fmt.Errorf("error reading default templates: %w", err)
+	}
+
+	var defaultTemplates core.PromptTemplates
+	if err := defaultViper.UnmarshalKey("default_templates", &defaultTemplates); err != nil {
+		return nil, fmt.Errorf("error unmarshaling default templates: %w", err)
+	}
+
+	return &defaultTemplates, nil
 }
 
 func validateConfig(conf *Config) error {
@@ -127,5 +185,9 @@ func validateConfig(conf *Config) error {
 	if conf.Database.Path == "" {
 		return ErrInvalidDBConfig
 	}
+	if conf.DefaultTemplates == nil && conf.UserTemplates == nil {
+		return fmt.Errorf("missing prompt templates")
+	}
+
 	return nil
 }
