@@ -9,6 +9,9 @@ default_templates:
       - **Lore**: %s
       - **Stakeholder Preferences**: %s
 
+      ### **Additional Information**
+      %s
+
       Here are your available tools:
       ### **Available Tools**
       The following tools are available to the AI Agent:
