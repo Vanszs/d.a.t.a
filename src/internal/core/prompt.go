@@ -3,8 +3,10 @@ package core
 import (
 	"fmt"
 	"strings"
+	"unicode"
 
 	"github.com/carv-protocol/d.a.t.a/src/internal/actions"
+	pluginCore "github.com/carv-protocol/d.a.t.a/src/plugins/core"
 )
 
 type ThoughtStepType string
@@ -167,6 +169,7 @@ func buildSystemPrompt(state *SystemState, stakeholder *Stakeholder, prompts *Pr
 		strings.Join(state.Character.Bio, "\n"),
 		strings.Join(state.Character.Lore, "\n"),
 		formatMap(state.StakeholderPreferences),
+		formatProviderStates(state.ProviderStates),
 		formatTools(state.AvailableTools),
 		strings.Join(state.Character.Style.Constraints, "\n"),
 		priorityAccountInfo,
@@ -203,4 +206,35 @@ func getHistoricalMessages(stakeholder *Stakeholder) string {
 	}
 
 	return strings.Join(stakeholder.HistoricalMsgs, ";")
+}
+
+func formatProviderStates(states []*pluginCore.ProviderState) string {
+	if len(states) == 0 {
+		return "No additional information available from providers"
+	}
+
+	var result string
+	for _, state := range states {
+		result += fmt.Sprintf("- **%s** (%s):\n", state.Name, state.Type)
+		result += fmt.Sprintf("  - Status: %s\n", state.State)
+		if state.Metadata != nil {
+			result += "  - Details:\n"
+			for key, value := range state.Metadata {
+				result += fmt.Sprintf("    - %s: %v\n", formatKey(key), value)
+			}
+		}
+		result += "\n"
+	}
+	return result
+}
+
+func formatKey(key string) string {
+	// Convert snake_case or camelCase to Title Case
+	words := strings.FieldsFunc(key, func(r rune) bool {
+		return r == '_' || unicode.IsUpper(r)
+	})
+	for i, word := range words {
+		words[i] = strings.Title(word)
+	}
+	return strings.Join(words, " ")
 }
