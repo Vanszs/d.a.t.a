@@ -5,6 +5,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"github.com/carv-protocol/d.a.t.a/src/pkg/database"
 	"github.com/carv-protocol/d.a.t.a/src/web"
 	"log"
 	"os"
@@ -78,7 +79,13 @@ func main() {
 
 func initializeAgent(ctx context.Context, config *Config) (*core.Agent, error) {
 	// Setup database
-	store := adapters.NewPostgresStore(config.Database.Path)
+	var store database.Store
+	if config.Database.Type == "postgres" {
+		store = adapters.NewPostgresStore(config.Database.Path)
+	} else {
+		store = adapters.NewSQLiteStore(config.Database.Path)
+	}
+
 	if err := store.Connect(ctx); err != nil {
 		return nil, fmt.Errorf("failed to connect to database: %w", err)
 	}

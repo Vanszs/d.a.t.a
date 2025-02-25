@@ -57,6 +57,9 @@ social:
   channel_id: 0
   debug: false
 
+web:
+  port: 8000
+
 plugin:
   plugins:
     d.a.t.a:

@@ -63,7 +63,7 @@ func (s *PostgresStore) CreateTable(ctx context.Context, tableName string, schem
 	}
 
 	// Clean and validate table name
-	tableName = sanitizeIdentifier(tableName)
+	tableName = parse(tableName)
 	if tableName == "" {
 		return fmt.Errorf("invalid table name")
 	}
@@ -96,7 +96,7 @@ func (s *PostgresStore) Insert(ctx context.Context, tableName string, data map[s
 		return fmt.Errorf("database connection not established")
 	}
 
-	tableName = sanitizeIdentifier(tableName)
+	tableName = parse(tableName)
 	if tableName == "" {
 		return fmt.Errorf("invalid table name")
 	}
@@ -151,7 +151,7 @@ func (s *PostgresStore) Update(ctx context.Context, tableName string, id string,
 		return fmt.Errorf("database connection not established")
 	}
 
-	tableName = sanitizeIdentifier(tableName)
+	tableName = parse(tableName)
 	if tableName == "" {
 		return fmt.Errorf("invalid table name")
 	}
@@ -219,7 +219,7 @@ func (s *PostgresStore) Delete(ctx context.Context, tableName string, id string)
 		return fmt.Errorf("database connection not established")
 	}
 
-	tableName = sanitizeIdentifier(tableName)
+	tableName = parse(tableName)
 	if tableName == "" {
 		return fmt.Errorf("invalid table name")
 	}
@@ -262,7 +262,7 @@ func (s *PostgresStore) Get(ctx context.Context, tableName string, id string) (m
 		return nil, fmt.Errorf("database connection not established")
 	}
 
-	tableName = sanitizeIdentifier(tableName)
+	tableName = parse(tableName)
 	if tableName == "" {
 		return nil, fmt.Errorf("invalid table name")
 	}
@@ -319,8 +319,8 @@ func (s *PostgresStore) CreateIndex(ctx context.Context, tableName string, index
 		return fmt.Errorf("database connection not established")
 	}
 
-	tableName = sanitizeIdentifier(tableName)
-	indexName = sanitizeIdentifier(indexName)
+	tableName = parse(tableName)
+	indexName = parse(indexName)
 	if tableName == "" || indexName == "" {
 		return fmt.Errorf("invalid table or index name")
 	}
@@ -375,24 +375,6 @@ func (s *PostgresStore) Query(ctx context.Context, query string, args ...interfa
 }
 
 // Helper functions
-
-func sanitizeIdentifier(identifier string) string {
+func parse(identifier string) string {
 	return "data_framework." + identifier
-	// Remove any characters that aren't alphanumeric or underscores
-	cleaned := strings.Map(func(r rune) rune {
-		if (r >= 'a' && r <= 'z') ||
-			(r >= 'A' && r <= 'Z') ||
-			(r >= '0' && r <= '9') ||
-			r == '_' {
-			return r
-		}
-		return -1
-	}, identifier)
-
-	// Ensure it doesn't start with a number
-	if len(cleaned) > 0 && cleaned[0] >= '0' && cleaned[0] <= '9' {
-		return ""
-	}
-
-	return cleaned
 }
