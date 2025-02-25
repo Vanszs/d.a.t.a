@@ -250,6 +250,74 @@ func (s *SQLiteStore) Get(ctx context.Context, tableName string, id string) (map
 	}, nil
 }
 
+// GetAll retrieves all records from the specified table
+func (s *SQLiteStore) GetAll(ctx context.Context, tableName string) ([]map[string]interface{}, error) {
+	if s.db == nil {
+		return nil, fmt.Errorf("database connection not established")
+	}
+
+	// Clean table name
+	tableName = sanitizeIdentifier(tableName)
+	if tableName == "" {
+		return nil, fmt.Errorf("invalid table name")
+	}
+
+	// Build and execute query
+	query := fmt.Sprintf("SELECT * FROM %s ORDER BY created_at DESC", tableName)
+
+	rows, err := s.db.QueryContext(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query table %s: %w", tableName, err)
+	}
+	defer rows.Close()
+
+	// Get column names
+	columns, err := rows.Columns()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get column names: %w", err)
+	}
+
+	// Prepare result slice
+	var results []map[string]interface{}
+
+	// Prepare value holders for scanning
+	values := make([]interface{}, len(columns))
+	valuePtrs := make([]interface{}, len(columns))
+	for i := range columns {
+		valuePtrs[i] = &values[i]
+	}
+
+	// Iterate through rows
+	for rows.Next() {
+		// Scan the row into value holders
+		if err := rows.Scan(valuePtrs...); err != nil {
+			return nil, fmt.Errorf("failed to scan row: %w", err)
+		}
+
+		// Create a map for this row's data
+		entry := make(map[string]interface{})
+		for i, col := range columns {
+			val := values[i]
+
+			// Handle null values
+			if val == nil {
+				entry[col] = nil
+				continue
+			}
+
+			entry[col] = val
+		}
+
+		results = append(results, entry)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating rows: %w", err)
+	}
+
+	return results, nil
+}
+
 // Close closes the database connection
 func (s *SQLiteStore) Close() error {
 	if s.db != nil {

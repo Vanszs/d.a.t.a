@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/carv-protocol/d.a.t.a/src/internal/actions"
-	walletactions "github.com/carv-protocol/d.a.t.a/src/tools/wallet/actions"
 )
 
 const ActionTypeWallet string = "wallet"
@@ -24,20 +23,32 @@ type WalletTool struct {
 }
 
 func NewWalletTool(config *Config) (*WalletTool, error) {
-	transferAllERC20Action, err := walletactions.NewTransferAllERC20Action(
-		config.PrivateKey,
-		config.Network,
-		config.RPCURL,
-		config.ChainID,
-		config.Timeout,
-		ActionTypeWallet,
-	)
-	if err != nil {
-		return nil, err
-	}
+	// transferAllERC20Action, err := walletactions.NewTransferAllERC20Action(
+	// 	config.PrivateKey,
+	// 	config.Network,
+	// 	config.RPCURL,
+	// 	config.ChainID,
+	// 	config.Timeout,
+	// 	ActionTypeWallet,
+	// )
+	// if err != nil {
+	// 	return nil, err
+	// }
+
+	// transferERC20Action, err := walletactions.NewTransferERC20Action(
+	// 	config.PrivateKey,
+	// 	config.Network,
+	// 	config.RPCURL,
+	// 	config.ChainID,
+	// 	config.Timeout,
+	// 	ActionTypeWallet,
+	// )
+	// if err != nil {
+	// 	return nil, err
+	// }
 
 	return &WalletTool{
-		actions: []actions.IAction{transferAllERC20Action},
+		actions: []actions.IAction{},
 	}, nil
 }
 

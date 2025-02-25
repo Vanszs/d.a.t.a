@@ -27,7 +27,7 @@ type managerImpl struct {
 }
 
 func NewManager(store database.Store) *managerImpl {
-	store.CreateTable(context.Background(), "memory", "id TEXT PRIMARY KEY, created_at TIMESTAMP, content BLOB")
+	store.CreateTable(context.Background(), "memory", "id TEXT PRIMARY KEY, created_at TIMESTAMP, content Text")
 	return &managerImpl{
 		store: store,
 	}
@@ -55,7 +55,7 @@ func (m *managerImpl) GetMemory(ctx context.Context, memoryID string) (*Memory, 
 	return &Memory{
 		MemoryID:  mem["id"].(string),
 		CreatedAt: mem["created_at"].(time.Time),
-		Content:   mem["content"].([]byte),
+		Content:   []byte(mem["content"].(string)),
 	}, nil
 }
 

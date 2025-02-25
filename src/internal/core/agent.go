@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"plugin"
-	"sync"
 	"time"
 
 	"github.com/carv-protocol/d.a.t.a/src/characters"
@@ -95,23 +94,16 @@ func (a *Agent) Start() error {
 		}
 	}
 
-	var wg sync.WaitGroup
-
 	// Start periodic task evaluation
-	wg.Add(1)
 	go func() {
-		defer wg.Done()
 		a.runPeriodicEvaluation()
 	}()
 
 	// Start social media monitoring
-	wg.Add(1)
 	go func() {
-		defer wg.Done()
 		a.monitorSocialInputs()
 	}()
 
-	wg.Wait()
 	return nil
 }
 

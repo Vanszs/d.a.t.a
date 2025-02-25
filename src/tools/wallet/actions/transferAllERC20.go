@@ -80,7 +80,7 @@ func (a *TransferAllERC20Action) Validate(params map[string]interface{}) error {
 }
 
 func (a *TransferAllERC20Action) ParametersPrompt() string {
-	return ` Parameters in JSON format:
+	return `
 	{
 		"erc20Address": <The address of the ERC20 token to transfer, this needs to be a valid ERC20 address>,
 		"toAddress": <The address to transfer the ERC20 token to, this needs to be a valid address>,

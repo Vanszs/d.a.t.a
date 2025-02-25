@@ -3,7 +3,9 @@ package main
 import (
 	"context"
 	"errors"
+	"flag"
 	"fmt"
+	"github.com/carv-protocol/d.a.t.a/src/web"
 	"log"
 	"os"
 	"os/signal"
@@ -34,9 +36,16 @@ import (
 var (
 	ErrInvalidLLMConfig = errors.New("invalid LLM configuration")
 	ErrInvalidDBConfig  = errors.New("invalid database configuration")
+	FlagConfig          string
 )
 
+func init() {
+	flag.StringVar(&FlagConfig, "conf", "./src/config", "config path, eg: -conf config.yaml")
+}
+
 func main() {
+	flag.Parse()
+
 	// Create a cancellable context
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -45,7 +54,7 @@ func main() {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 
 	// Load configuration
-	config, err := loadConfig()
+	config, err := loadConfig(FlagConfig)
 	if err != nil {
 		log.Fatalf("Failed to load config: %v", err)
 	}
@@ -61,13 +70,15 @@ func main() {
 		log.Fatalf("Failed to start agent: %v", err)
 	}
 
+	web.Start(config.Web.Port)
+
 	// Wait for shutdown signal
 	<-handleShutdown(ctx, agent, config.Settings.ShutdownTimeout)
 }
 
 func initializeAgent(ctx context.Context, config *Config) (*core.Agent, error) {
 	// Setup database
-	store := adapters.NewSQLiteStore(config.Database.Path)
+	store := adapters.NewPostgresStore(config.Database.Path)
 	if err := store.Connect(ctx); err != nil {
 		return nil, fmt.Errorf("failed to connect to database: %w", err)
 	}
@@ -269,6 +280,8 @@ func handleShutdown(ctx context.Context, agent *core.Agent, timeoutSeconds int) 
 		// Create shutdown context with timeout
 		shutdownCtx, cancel := context.WithTimeout(ctx, time.Duration(timeoutSeconds)*time.Second)
 		defer cancel()
+
+		web.Stop()
 
 		if err := agent.Shutdown(shutdownCtx); err != nil {
 			log.Printf("Error during shutdown: %v", err)

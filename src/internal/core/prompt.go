@@ -132,6 +132,7 @@ func buildMessagePrompt(state *SystemState, msg *SocialMessage, stakeholder *Sta
 		msg.Content,
 		getHistoricalMessages(stakeholder),
 		strings.Join(state.Character.Style.Tone, ", "),
+		strings.Join(state.Character.MessageExamples, "\n"),
 		formatActions(state.AvailableActions),
 	)
 }

@@ -7,11 +7,13 @@ import (
 )
 
 type CharacterConfig struct {
-	Name   string   `json:"name"`
-	System string   `json:"system"`
-	Bio    []string `json:"bio"`
-	Lore   []string `json:"lore"`
-	Style  struct {
+	Name             string   `json:"name"`
+	System           string   `json:"system"`
+	Bio              []string `json:"bio"`
+	Lore             []string `json:"lore"`
+	MessageExamples  []string `json:"message_examples"`
+	TaskInstructions string   `json:"task_instructions"`
+	Style            struct {
 		Tone        []string `json:"tone"`
 		Constraints []string `json:"constraints"`
 	} `json:"style"`
@@ -52,5 +54,7 @@ func NewCharacter(config CharacterConfig) *Character {
 		Goals:            config.Goals,
 		PriorityAccounts: config.PriorityAccounts,
 		Preferences:      config.Preferences,
+		MessageExamples:  config.MessageExamples,
+		TaskInstructions: config.TaskInstructions,
 	}
 }

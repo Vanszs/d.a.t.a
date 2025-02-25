@@ -29,7 +29,7 @@ func NewSocialClient(
 		socialMsgChannel: make(chan core.SocialMessage),
 		errorChannel:     make(chan error, 100), // Buffered channel to prevent blocking
 	}
-	if twitterConfig != nil {
+	if twitterConfig != nil && twitterConfig.Mode != "" {
 		client, err := clients.NewTwitterClient(twitterConfig)
 		if err != nil {
 			panic(err)

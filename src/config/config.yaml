@@ -40,7 +40,23 @@ token:
   ticker: "carv"
   contract_addr: "0xc08cd26474722ce93f4d0c34d16201461c10aa8c"
 
-# Plugin configuration
+social:
+  # twitter
+  mode: ""
+  username: ""
+  password: ""
+  api_key: ""
+  api_key_secret: ""
+  access_token: ""
+  token_secret: ""
+  monitor_window: 0
+  # discord
+  api_token: ""
+  # telegram
+  bot_token: ""
+  channel_id: 0
+  debug: false
+
 plugin:
   plugins:
     d.a.t.a:
