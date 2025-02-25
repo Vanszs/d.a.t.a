@@ -5,8 +5,6 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"github.com/carv-protocol/d.a.t.a/src/pkg/database"
-	"github.com/carv-protocol/d.a.t.a/src/web"
 	"log"
 	"os"
 	"os/signal"
@@ -22,6 +20,7 @@ import (
 	"github.com/carv-protocol/d.a.t.a/src/internal/token"
 	"github.com/carv-protocol/d.a.t.a/src/internal/tools"
 	"github.com/carv-protocol/d.a.t.a/src/pkg/carv"
+	"github.com/carv-protocol/d.a.t.a/src/pkg/database"
 	"github.com/carv-protocol/d.a.t.a/src/pkg/database/adapters"
 	"github.com/carv-protocol/d.a.t.a/src/pkg/llm"
 	pluginCore "github.com/carv-protocol/d.a.t.a/src/plugins/core"
@@ -29,6 +28,7 @@ import (
 	customTools "github.com/carv-protocol/d.a.t.a/src/tools"
 	dataTool "github.com/carv-protocol/d.a.t.a/src/tools/d.a.t.a"
 	"github.com/carv-protocol/d.a.t.a/src/tools/wallet"
+	"github.com/carv-protocol/d.a.t.a/src/web"
 
 	"github.com/google/uuid"
 )
@@ -80,10 +80,13 @@ func main() {
 func initializeAgent(ctx context.Context, config *Config) (*core.Agent, error) {
 	// Setup database
 	var store database.Store
-	if config.Database.Type == "postgres" {
+	switch config.Database.Type {
+	case "postgres":
 		store = adapters.NewPostgresStore(config.Database.Path)
-	} else {
+	case "sqlite":
 		store = adapters.NewSQLiteStore(config.Database.Path)
+	default:
+		return nil, fmt.Errorf("unknown database type: %s", config.Database.Type)
 	}
 
 	if err := store.Connect(ctx); err != nil {
