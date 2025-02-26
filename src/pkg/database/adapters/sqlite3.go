@@ -348,3 +348,23 @@ func (s *SQLiteStore) Begin(ctx context.Context) (*sql.Tx, error) {
 	}
 	return s.db.BeginTx(ctx, nil)
 }
+
+func sanitizeIdentifier(identifier string) string {
+	// Remove any characters that aren't alphanumeric or underscores
+	cleaned := strings.Map(func(r rune) rune {
+		if (r >= 'a' && r <= 'z') ||
+			(r >= 'A' && r <= 'Z') ||
+			(r >= '0' && r <= '9') ||
+			r == '_' {
+			return r
+		}
+		return -1
+	}, identifier)
+
+	// Ensure it doesn't start with a number
+	if len(cleaned) > 0 && cleaned[0] >= '0' && cleaned[0] <= '9' {
+		return ""
+	}
+
+	return cleaned
+}
