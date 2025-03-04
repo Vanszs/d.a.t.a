@@ -2,9 +2,6 @@ package core
 
 import (
 	"context"
-	"time"
-
-	"github.com/carv-protocol/d.a.t.a/src/internal/actions"
 )
 
 // StakeholderType is an enum for stakeholder types
@@ -41,33 +38,6 @@ type TokenBalance struct {
 	Balance float64
 }
 
-// TaskStatus is an enum for task status
-type TaskStatus string
-
-const (
-	TaskStatusActive    TaskStatus = "active"
-	TaskStatusCompleted TaskStatus = "completed"
-	TaskStatusPending   TaskStatus = "pending"
-	TaskStatusFailed    TaskStatus = "failed"
-)
-
-// Task is a task that the agent can execute
-type Task struct {
-	ID                       string
-	Name                     string
-	Description              string
-	Priority                 float64
-	ExecutionSteps           []string
-	Status                   TaskStatus
-	Deadline                 *time.Time
-	RequiresApproval         bool
-	RequiresStakeholderInput bool
-	Tools                    []string
-	CreatedBy                string
-	CreatedAt                time.Time
-	UpdatedAt                time.Time
-}
-
 // StakeholderManager is an interface for managing stakeholders
 type StakeholderManager interface {
 	FetchOrCreateStakeholder(ctx context.Context, id, platform string, stakeholderType StakeholderType) (*Stakeholder, error)
@@ -79,28 +49,6 @@ type StakeholderManager interface {
 type TokenManager interface {
 	FetchNativeTokenBalance(ctx context.Context, id, platform string) (*TokenBalance, error)
 	NativeTokenInfo(ctx context.Context) (*TokenInfo, error)
-}
-
-// TaskManager is an interface for managing tasks
-type TaskManager interface {
-	AddTask(ctx context.Context, task Task) error
-	GetTasks(ctx context.Context) ([]*Task, error)
-}
-
-// Tool interface
-type Tool interface {
-	Initialize(ctx context.Context) error
-	Name() string
-	Description() string
-	AvailableActions() []actions.IAction
-}
-
-// ToolManager is an interface for managing tools
-type ToolManager interface {
-	Register(tool Tool) error
-	AvailableTools() []Tool
-	AvailableActions() []actions.IAction
-	GetAction(actionType string, actionName string) (actions.IAction, error)
 }
 
 // IntentType defines different types of intents

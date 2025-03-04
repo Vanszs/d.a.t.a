@@ -11,6 +11,7 @@ import (
 	"github.com/carv-protocol/d.a.t.a/src/characters"
 	"github.com/carv-protocol/d.a.t.a/src/internal/actions"
 	"github.com/carv-protocol/d.a.t.a/src/pkg/llm"
+	"github.com/carv-protocol/d.a.t.a/src/pkg/logger"
 
 	"go.uber.org/zap"
 )
@@ -75,7 +76,6 @@ func NewCognitiveEngine(
 	llmClient llm.Client,
 	model string,
 	character *characters.Character,
-	logger *zap.SugaredLogger,
 	promptTemplates *PromptTemplates,
 ) *CognitiveEngine {
 	return &CognitiveEngine{
@@ -84,7 +84,7 @@ func NewCognitiveEngine(
 		maxSteps:        3,
 		minConfidence:   0.7,
 		character:       character,
-		logger:          logger,
+		logger:          logger.GetLogger(),
 		promptTemplates: promptTemplates,
 	}
 }
@@ -94,7 +94,6 @@ func (e *CognitiveEngine) GenerateThoughtChain(
 	ctx context.Context,
 	state *SystemState,
 	input interface{},
-	prefs map[string]interface{},
 	promptGenerator promptGeneratorFunc,
 ) (*ThoughtChain, error) {
 	e.logger.Info("Generating thought chain")
@@ -115,7 +114,7 @@ func (e *CognitiveEngine) GenerateThoughtChain(
 
 		// Detect "aha moment"
 		if AhaMomentDetection := e.detectAhaMoment(
-			ctx, step, chain.Steps, step.Alternatives, prefs,
+			ctx, step, chain.Steps, step.Alternatives, map[string]interface{}{},
 		); purpose != PurposeConcrete && AhaMomentDetection.Triggered {
 			// Generate reconsideration step
 			step, err = e.generateThoughtStep(ctx, state, chain, PurposeReconsider, promptGenerator)
@@ -196,14 +195,11 @@ func formatPreviousSteps(steps []*ThoughtStep) string {
 // GenerateActions uses chain-of-thought for action planning
 func (e *CognitiveEngine) GenerateActions(
 	ctx context.Context,
-	task *Task,
 	state *SystemState,
 ) (*ActionGeneration, error) {
 	// Build action context
 	actionContext := map[string]interface{}{
-		"task":        task,
-		"preferences": state.StakeholderPreferences,
-		"goal":        "generate detailed action plan",
+		"goal": "generate detailed action plan",
 	}
 
 	// Generate thought chain for action planning
@@ -211,8 +207,7 @@ func (e *CognitiveEngine) GenerateActions(
 		ctx,
 		state,
 		actionContext,
-		state.StakeholderPreferences,
-		generateActionsPromptFunc(state, task, state.AvailableActions, e.promptTemplates),
+		generateActionsPromptFunc(state, state.AvailableActions, e.promptTemplates),
 	)
 	if err != nil {
 		return nil, err
@@ -224,40 +219,6 @@ func (e *CognitiveEngine) GenerateActions(
 	return &ActionGeneration{
 		Actions: actions,
 		Chain:   chain,
-	}, nil
-}
-
-// GenerateTasks uses chain-of-thought for tasks planning
-func (e *CognitiveEngine) GenerateTasks(
-	ctx context.Context,
-	state *SystemState,
-) (*TaskGeneration, error) {
-	// Build action context
-	taskContext := map[string]interface{}{
-		"state": state,
-		"goal":  "generate detailed tasks plan",
-	}
-
-	// Generate thought chain for action planning
-	chain, err := e.GenerateThoughtChain(
-		ctx,
-		state,
-		taskContext,
-		state.StakeholderPreferences,
-		generateTasksPromptFunc(state, e.promptTemplates))
-	if err != nil {
-		return nil, err
-	}
-
-	// Convert thought chain to actions
-	task, err := convertThoughtChainToTasks(chain)
-	if err != nil {
-		return nil, err
-	}
-
-	return &TaskGeneration{
-		Tasks: []*Task{task},
-		Chain: chain,
 	}, nil
 }
 

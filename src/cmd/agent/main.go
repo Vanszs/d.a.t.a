@@ -12,22 +12,16 @@ import (
 	"time"
 
 	"github.com/carv-protocol/d.a.t.a/src/characters"
-	"github.com/carv-protocol/d.a.t.a/src/internal/actions"
 	"github.com/carv-protocol/d.a.t.a/src/internal/core"
 	"github.com/carv-protocol/d.a.t.a/src/internal/memory"
+	"github.com/carv-protocol/d.a.t.a/src/internal/plugins"
 	"github.com/carv-protocol/d.a.t.a/src/internal/social"
-	"github.com/carv-protocol/d.a.t.a/src/internal/tasks"
 	"github.com/carv-protocol/d.a.t.a/src/internal/token"
-	"github.com/carv-protocol/d.a.t.a/src/internal/tools"
 	"github.com/carv-protocol/d.a.t.a/src/pkg/carv"
 	"github.com/carv-protocol/d.a.t.a/src/pkg/database"
 	"github.com/carv-protocol/d.a.t.a/src/pkg/database/adapters"
 	"github.com/carv-protocol/d.a.t.a/src/pkg/llm"
-	pluginCore "github.com/carv-protocol/d.a.t.a/src/plugins/core"
 	dataPlugin "github.com/carv-protocol/d.a.t.a/src/plugins/plugin-d.a.t.a"
-	customTools "github.com/carv-protocol/d.a.t.a/src/tools"
-	dataTool "github.com/carv-protocol/d.a.t.a/src/tools/d.a.t.a"
-	"github.com/carv-protocol/d.a.t.a/src/tools/wallet"
 	"github.com/carv-protocol/d.a.t.a/src/web"
 
 	"github.com/google/uuid"
@@ -39,6 +33,8 @@ var (
 	ErrInvalidDBConfig  = errors.New("invalid database configuration")
 	FlagConfig          string
 )
+
+type PluginFactory func(llmClient llm.Client, config *PluginConfig) (plugins.Plugin, error)
 
 func init() {
 	flag.StringVar(&FlagConfig, "conf", "./src/config", "config path, eg: -conf config.yaml")
@@ -110,16 +106,8 @@ func initializeAgent(ctx context.Context, config *Config) (*core.Agent, error) {
 		return nil, fmt.Errorf("failed to load character: %w", err)
 	}
 
-	// Initialize tools
-	toolsManager := initializeTools(config)
-
 	// Initialize plugins
 	pluginRegistry := initializePlugins(config)
-
-	actionManager, err := registerPlugins(ctx, pluginRegistry, config)
-	if err != nil {
-		return nil, fmt.Errorf("failed to register plugins: %w", err)
-	}
 
 	promptTemplates := config.UserTemplates
 	if config.UserTemplates == nil {
@@ -133,15 +121,12 @@ func initializeAgent(ctx context.Context, config *Config) (*core.Agent, error) {
 		LLMClient:    llmClient,
 		Model:        config.LLMConfig.Model,
 		Stakeholders: stakeholderManager,
-		ToolsManager: toolsManager,
 		SocialClient: social.NewSocialClient(
 			&config.Social.TwitterConfig,
 			&config.Social.DiscordConfig,
 			&config.Social.TelegramConfig,
 		),
 		PromptTemplates: promptTemplates,
-		TaskManager:     tasks.NewManager(tasks.NewTaskStore(store)),
-		ActionManager:   actionManager,
 		TokenManager:    tokenManager,
 		PluginRegistry:  pluginRegistry,
 	}
@@ -154,38 +139,23 @@ func initializeAgent(ctx context.Context, config *Config) (*core.Agent, error) {
 	return agent, nil
 }
 
-func initializeTools(config *Config) *tools.Manager {
-	toolsManager := tools.NewManager()
-
-	walletTool, err := wallet.NewWalletTool(&config.Wallet)
-	if err != nil {
-		log.Fatalf("Failed to create wallet tool: %v", err)
-	}
-
-	toolsManager.Register(&customTools.TwitterTool{})
-	toolsManager.Register(walletTool)
-	toolsManager.Register(&dataTool.CARVDataTool{})
-
-	return toolsManager
-}
-
-func initializePlugins(config *Config) *pluginCore.Registry {
-	registry := pluginCore.NewRegistry()
+func initializePlugins(config *Config) *plugins.Registry {
+	registry := plugins.NewPluginRegistry()
 
 	// Initialize built-in plugins
-	builtinPlugins := map[string]pluginCore.PluginFactory{
+	builtinPlugins := map[string]func(llmClient llm.Client, config *plugins.Config) (plugins.Plugin, error){
 		"d.a.t.a": dataPlugin.NewPlugin,
 	}
 
 	// Load plugins from configuration
-	for name, pluginConfig := range config.Plugin.Plugins {
+	for name, pluginConfig := range config.Plugins {
 		// Skip disabled plugins
 		if !pluginConfig.Enabled {
 			continue
 		}
 
 		// Check dependencies
-		if err := checkPluginDependencies(pluginConfig, config.Plugin.Plugins); err != nil {
+		if err := checkPluginDependencies(pluginConfig, config.Plugins); err != nil {
 			log.Printf("Failed to load plugin %s: %v", name, err)
 			continue
 		}
@@ -198,59 +168,24 @@ func initializePlugins(config *Config) *pluginCore.Registry {
 		}
 
 		// Create plugin instance
-		plugin := factory(llm.NewClient((*llm.LLMConfig)(&config.LLMConfig)))
+		plugin, err := factory(llm.NewClient((*llm.LLMConfig)(&config.LLMConfig)), &plugins.Config{
+			Name:        name,
+			Description: pluginConfig.Description,
+			Options:     pluginConfig.Options,
+		})
 
-		// Verify metadata
-		if err := verifyPluginMetadata(plugin, pluginConfig); err != nil {
-			log.Printf("Plugin metadata verification failed for %s: %v", name, err)
+		// Register plugin
+		if err != nil {
+			log.Printf("Failed to register plugin %s: %v", name, err)
 			continue
 		}
 
-		// Register plugin
 		if err := registry.Register(plugin); err != nil {
 			log.Printf("Failed to register plugin %s: %v", name, err)
-			continue
 		}
 	}
 
 	return registry
-}
-
-// returns the action manager
-func registerPlugins(ctx context.Context, pluginRegistry *pluginCore.Registry, config *Config) (actions.ActionManager, error) {
-	// Initialize each plugin with its own options
-	for name, pluginConfig := range config.Plugin.Plugins {
-		if !pluginConfig.Enabled {
-			continue
-		}
-
-		// Check if plugin is registered
-		if _, exists := pluginRegistry.GetPlugin(name); !exists {
-			log.Printf("Plugin %s is not registered, skipping initialization", name)
-			continue
-		}
-
-		if err := pluginRegistry.InitPlugin(ctx, name, pluginConfig.Options); err != nil {
-			return nil, fmt.Errorf("failed to initialize plugin %s: %w", name, err)
-		}
-	}
-
-	if err := pluginRegistry.StartAll(ctx); err != nil {
-		return nil, fmt.Errorf("failed to start plugins: %w", err)
-	}
-
-	// Initialize action manager and register actions
-	actionManager := actions.NewManager()
-
-	for _, pluginAction := range pluginRegistry.GetActions() {
-		log.Printf("Registering action %s", pluginAction.Name())
-		adapter := pluginCore.NewActionAdapter(ctx, pluginAction)
-		if err := actionManager.Register(adapter); err != nil {
-			return nil, fmt.Errorf("failed to register action %s: %w", pluginAction.Name(), err)
-		}
-	}
-
-	return actionManager, nil
 }
 
 // checkPluginDependencies verifies that all plugin dependencies are enabled
@@ -263,17 +198,6 @@ func checkPluginDependencies(config PluginConfig, plugins map[string]PluginConfi
 		if !depConfig.Enabled {
 			return fmt.Errorf("dependency %s is disabled", dep)
 		}
-	}
-	return nil
-}
-
-// verifyPluginMetadata verifies that plugin metadata matches configuration
-func verifyPluginMetadata(plugin pluginCore.Plugin, config PluginConfig) error {
-	if plugin.Name() != config.Name {
-		return fmt.Errorf("plugin name mismatch: got %s, want %s", plugin.Name(), config.Name)
-	}
-	if plugin.Version() != config.Version {
-		return fmt.Errorf("plugin version mismatch: got %s, want %s", plugin.Version(), config.Version)
 	}
 	return nil
 }

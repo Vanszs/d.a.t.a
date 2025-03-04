@@ -6,7 +6,7 @@ import (
 	"unicode"
 
 	"github.com/carv-protocol/d.a.t.a/src/internal/actions"
-	pluginCore "github.com/carv-protocol/d.a.t.a/src/plugins/core"
+	"github.com/carv-protocol/d.a.t.a/src/internal/plugins"
 )
 
 type ThoughtStepType string
@@ -73,7 +73,7 @@ func generateTasksPromptFunc(systemState *SystemState, promptTemplate *PromptTem
 	}
 }
 
-func generateActionsPromptFunc(systemState *SystemState, task *Task, actions []actions.IAction, prompts *PromptTemplates) promptGeneratorFunc {
+func generateActionsPromptFunc(systemState *SystemState, actions []actions.IAction, prompts *PromptTemplates) promptGeneratorFunc {
 	return func(stepPurpose StepPurpose, steps []*ThoughtStep) string {
 		switch stepPurpose {
 		case PurposeInitial:
@@ -99,26 +99,10 @@ func generateActionsPromptFunc(systemState *SystemState, task *Task, actions []a
 	}
 }
 
-func convertGoalsToString(goals []Goal) string {
-	var sb strings.Builder
-	for _, goal := range goals {
-		sb.WriteString(fmt.Sprintf("Name: %s, Description: %s, Weight: %f\n", goal.Name, goal.Description, goal.Weight))
-	}
-	return sb.String()
-}
-
 func formatMap(data map[string]interface{}) string {
 	var result string
 	for key, value := range data {
 		result += fmt.Sprintf("%s: %v\n", key, value)
-	}
-	return result
-}
-
-func formatTools(tools []Tool) string {
-	var result string
-	for _, tool := range tools {
-		result += fmt.Sprintf("- **%s**: %s\n", tool.Name(), tool.Description())
 	}
 	return result
 }
@@ -166,12 +150,9 @@ func buildSystemPrompt(state *SystemState, stakeholder *Stakeholder, prompts *Pr
 		baseTemplate,
 		state.Character.Name,
 		state.Character.System,
-		convertGoalsToString(state.AgentStates.Goals),
 		strings.Join(state.Character.Bio, "\n"),
 		strings.Join(state.Character.Lore, "\n"),
-		formatMap(state.StakeholderPreferences),
 		formatProviderStates(state.ProviderStates),
-		formatTools(state.AvailableTools),
 		strings.Join(state.Character.Style.Constraints, "\n"),
 		priorityAccountInfo,
 		tokenBalanceInfo,
@@ -209,7 +190,7 @@ func getHistoricalMessages(stakeholder *Stakeholder) string {
 	return strings.Join(stakeholder.HistoricalMsgs, ";")
 }
 
-func formatProviderStates(states []*pluginCore.ProviderState) string {
+func formatProviderStates(states []*plugins.ProviderState) string {
 	if len(states) == 0 {
 		return "No additional information available from providers"
 	}
