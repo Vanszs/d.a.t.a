@@ -34,7 +34,7 @@ var (
 	FlagConfig          string
 )
 
-type PluginFactory func(llmClient llm.Client, config *PluginConfig) (plugins.Plugin, error)
+type pluginFactory func(llmClient llm.Client, config *plugins.Config) (plugins.Plugin, error)
 
 func init() {
 	flag.StringVar(&FlagConfig, "conf", "./src/config", "config path, eg: -conf config.yaml")
@@ -143,7 +143,7 @@ func initializePlugins(config *Config) *plugins.Registry {
 	registry := plugins.NewPluginRegistry()
 
 	// Initialize built-in plugins
-	builtinPlugins := map[string]func(llmClient llm.Client, config *plugins.Config) (plugins.Plugin, error){
+	builtinPlugins := map[string]pluginFactory{
 		"d.a.t.a": dataPlugin.NewPlugin,
 	}
 
