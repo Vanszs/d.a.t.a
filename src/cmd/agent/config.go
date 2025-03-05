@@ -2,14 +2,15 @@ package main
 
 import (
 	"fmt"
+	"log"
+	"strings"
+
 	"github.com/carv-protocol/d.a.t.a/src/internal/core"
 	"github.com/carv-protocol/d.a.t.a/src/pkg/carv"
 	"github.com/carv-protocol/d.a.t.a/src/pkg/clients"
 	"github.com/carv-protocol/d.a.t.a/src/pkg/llm"
-	"github.com/carv-protocol/d.a.t.a/src/tools/wallet"
+
 	"github.com/spf13/viper"
-	"log"
-	"strings"
 )
 
 type Config struct {
@@ -44,8 +45,6 @@ type Config struct {
 		ContractAddr string `mapstructure:"contract_addr"`
 	} `mapstructure:"token"`
 
-	Wallet wallet.Config `mapstructure:"wallet"`
-
 	Web struct {
 		Port int `mapstructure:"port"`
 	} `mapstructure:"web"`
@@ -53,9 +52,7 @@ type Config struct {
 	UserTemplates    *core.PromptTemplates `mapstructure:"user_templates"`
 	DefaultTemplates *core.PromptTemplates `mapstructure:"default_templates"`
 
-	Plugin struct {
-		Plugins map[string]PluginConfig `mapstructure:"plugins"`
-	} `mapstructure:"plugin"`
+	Plugins map[string]PluginConfig `mapstructure:"plugins"`
 }
 
 type PluginConfig struct {
