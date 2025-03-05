@@ -3,6 +3,7 @@ package social
 import (
 	"context"
 	"fmt"
+	"github.com/carv-protocol/d.a.t.a/src/internal/conf"
 	"sync"
 	"time"
 
@@ -21,9 +22,9 @@ type SocialClientImpl struct {
 
 // NewSocialClient creates a new social client with error handling
 func NewSocialClient(
-	twitterConfig *clients.TwitterConfig,
-	discordConfig *clients.DiscordConfig,
-	telegramConfig *clients.TelegramConfig,
+	twitterConfig *conf.TwitterConfig,
+	discordConfig *conf.DiscordConfig,
+	telegramConfig *conf.TelegramConfig,
 ) *SocialClientImpl {
 	cli := &SocialClientImpl{
 		socialMsgChannel: make(chan core.SocialMessage),

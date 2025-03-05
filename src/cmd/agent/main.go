@@ -2,9 +2,9 @@ package main
 
 import (
 	"context"
-	"errors"
 	"flag"
 	"fmt"
+	"github.com/carv-protocol/d.a.t.a/src/internal/conf"
 	"log"
 	"os"
 	"os/signal"
@@ -27,12 +27,7 @@ import (
 	"github.com/google/uuid"
 )
 
-// Config validation errors
-var (
-	ErrInvalidLLMConfig = errors.New("invalid LLM configuration")
-	ErrInvalidDBConfig  = errors.New("invalid database configuration")
-	FlagConfig          string
-)
+var FlagConfig string
 
 type pluginFactory func(llmClient llm.Client, config *plugins.Config) (plugins.Plugin, error)
 
@@ -51,7 +46,7 @@ func main() {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 
 	// Load configuration
-	config, err := loadConfig(FlagConfig)
+	config, err := conf.LoadConfig(FlagConfig)
 	if err != nil {
 		log.Fatalf("Failed to load config: %v", err)
 	}
@@ -73,7 +68,7 @@ func main() {
 	<-handleShutdown(ctx, agent, config.Settings.ShutdownTimeout)
 }
 
-func initializeAgent(ctx context.Context, config *Config) (*core.Agent, error) {
+func initializeAgent(ctx context.Context, config *conf.Config) (*core.Agent, error) {
 	// Setup database
 	var store database.Store
 	switch config.Database.Type {
@@ -90,7 +85,7 @@ func initializeAgent(ctx context.Context, config *Config) (*core.Agent, error) {
 	}
 
 	// Initialize components
-	llmClient := llm.NewClient((*llm.LLMConfig)(&config.LLMConfig))
+	llmClient := llm.NewClient((*conf.LLMConfig)(&config.LLMConfig))
 	carvClient := carv.NewClient(config.Data.CarvConfig.APIKey, config.Data.CarvConfig.BaseURL)
 	memoryManager := memory.NewManager(store)
 	tokenManager := token.NewTokenManager(carvClient, &core.TokenInfo{
@@ -139,7 +134,7 @@ func initializeAgent(ctx context.Context, config *Config) (*core.Agent, error) {
 	return agent, nil
 }
 
-func initializePlugins(config *Config) *plugins.Registry {
+func initializePlugins(config *conf.Config) *plugins.Registry {
 	registry := plugins.NewPluginRegistry()
 
 	// Initialize built-in plugins
@@ -168,7 +163,7 @@ func initializePlugins(config *Config) *plugins.Registry {
 		}
 
 		// Create plugin instance
-		plugin, err := factory(llm.NewClient((*llm.LLMConfig)(&config.LLMConfig)), &plugins.Config{
+		plugin, err := factory(llm.NewClient((*conf.LLMConfig)(&config.LLMConfig)), &plugins.Config{
 			Name:        name,
 			Description: pluginConfig.Description,
 			Options:     pluginConfig.Options,
@@ -189,7 +184,7 @@ func initializePlugins(config *Config) *plugins.Registry {
 }
 
 // checkPluginDependencies verifies that all plugin dependencies are enabled
-func checkPluginDependencies(config PluginConfig, plugins map[string]PluginConfig) error {
+func checkPluginDependencies(config conf.PluginConfig, plugins map[string]conf.PluginConfig) error {
 	for _, dep := range config.Dependencies {
 		depConfig, exists := plugins[dep]
 		if !exists {

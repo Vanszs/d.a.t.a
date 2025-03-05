@@ -3,17 +3,11 @@ package clients
 import (
 	"context"
 	"fmt"
+	"github.com/carv-protocol/d.a.t.a/src/internal/conf"
 	"time"
 
 	telegram "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
-
-// TelegramConfig holds the configuration for Telegram client
-type TelegramConfig struct {
-	Token     string `mapstructure:"bot_token"`  // Bot token from BotFather
-	ChannelID int64  `mapstructure:"channel_id"` // Default channel ID for broadcasts
-	Debug     bool   `mapstructure:"debug"`      // Enable debug mode
-}
 
 // TelegramMessage represents a message structure
 type TelegramMessage struct {
@@ -31,12 +25,12 @@ type TelegramMessage struct {
 // TelegramClient represents a Telegram bot client
 type TelegramClient struct {
 	bot     *telegram.BotAPI
-	config  TelegramConfig
+	config  conf.TelegramConfig
 	msgChan chan TelegramMessage // msg channel
 }
 
 // NewTelegramClient creates a new Telegram client instance
-func NewTelegramClient(config *TelegramConfig) (*TelegramClient, error) {
+func NewTelegramClient(config *conf.TelegramConfig) (*TelegramClient, error) {
 	bot, err := telegram.NewBotAPI(config.Token)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create telegram bot: %w", err)
