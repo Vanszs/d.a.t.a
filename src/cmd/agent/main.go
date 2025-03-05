@@ -5,7 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"github.com/carv-protocol/d.a.t.a/src/internal/conf"
-	"log"
+	"github.com/carv-protocol/d.a.t.a/src/pkg/logger"
 	"os"
 	"os/signal"
 	"syscall"
@@ -38,28 +38,27 @@ func init() {
 func main() {
 	flag.Parse()
 
+	logger.Init()
+
 	// Create a cancellable context
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// Setup logging
-	log.SetFlags(log.LstdFlags | log.Lshortfile)
-
 	// Load configuration
 	config, err := conf.LoadConfig(FlagConfig)
 	if err != nil {
-		log.Fatalf("Failed to load config: %v", err)
+		logger.GetLogger().Fatalf("Failed to load config: %v", err)
 	}
 
 	// Initialize components
 	agent, err := initializeAgent(ctx, config)
 	if err != nil {
-		log.Fatalf("Failed to initialize agent: %v", err)
+		logger.GetLogger().Fatalf("Failed to initialize agent: %v", err)
 	}
 
 	// Start the agent
-	if err := agent.Start(); err != nil {
-		log.Fatalf("Failed to start agent: %v", err)
+	if err = agent.Start(); err != nil {
+		logger.GetLogger().Fatalf("Failed to start agent: %v", err)
 	}
 
 	web.Start(config.Web.Port)
@@ -151,14 +150,14 @@ func initializePlugins(config *conf.Config) *plugins.Registry {
 
 		// Check dependencies
 		if err := checkPluginDependencies(pluginConfig, config.Plugins); err != nil {
-			log.Printf("Failed to load plugin %s: %v", name, err)
+			logger.GetLogger().Errorf("Failed to load plugin %s: %v", name, err)
 			continue
 		}
 
 		// Get plugin factory
 		factory, exists := builtinPlugins[name]
 		if !exists {
-			log.Printf("Plugin %s not found in built-in plugins", name)
+			logger.GetLogger().Errorf("Plugin %s not found in built-in plugins", name)
 			continue
 		}
 
@@ -171,12 +170,12 @@ func initializePlugins(config *conf.Config) *plugins.Registry {
 
 		// Register plugin
 		if err != nil {
-			log.Printf("Failed to register plugin %s: %v", name, err)
+			logger.GetLogger().Errorf("Failed to register plugin %s: %v", name, err)
 			continue
 		}
 
-		if err := registry.Register(plugin); err != nil {
-			log.Printf("Failed to register plugin %s: %v", name, err)
+		if err = registry.Register(plugin); err != nil {
+			logger.GetLogger().Errorf("Failed to register plugin %s: %v", name, err)
 		}
 	}
 
@@ -204,7 +203,7 @@ func handleShutdown(ctx context.Context, agent *core.Agent, timeoutSeconds int) 
 
 	go func() {
 		<-sigChan
-		log.Println("Shutdown signal received, initiating graceful shutdown...")
+		logger.GetLogger().Infoln("Shutdown signal received, initiating graceful shutdown...")
 
 		// Create shutdown context with timeout
 		shutdownCtx, cancel := context.WithTimeout(ctx, time.Duration(timeoutSeconds)*time.Second)
@@ -213,7 +212,7 @@ func handleShutdown(ctx context.Context, agent *core.Agent, timeoutSeconds int) 
 		web.Stop()
 
 		if err := agent.Shutdown(shutdownCtx); err != nil {
-			log.Printf("Error during shutdown: %v", err)
+			logger.GetLogger().Errorf("Error during shutdown: %v", err)
 		}
 
 		close(done)

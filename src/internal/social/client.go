@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/carv-protocol/d.a.t.a/src/internal/conf"
+	"github.com/carv-protocol/d.a.t.a/src/pkg/logger"
 	"sync"
 	"time"
 
@@ -156,7 +157,7 @@ func (sc *SocialClientImpl) monitorTwitter(ctx context.Context) {
 					// Error successfully reported
 				default:
 					// Channel is full, log locally
-					fmt.Printf("Error channel full, dropping error: %v\n", err)
+					logger.GetLogger().Errorf("Error channel full, dropping error: %v", err)
 				}
 				//not return here, continue monitoring
 				continue
@@ -200,7 +201,7 @@ func (sc *SocialClientImpl) monitorDiscord(ctx context.Context) {
 func (sc *SocialClientImpl) monitorTelegram(ctx context.Context) {
 	// Start the Telegram listener
 	if err := sc.telegramBot.StartListener(ctx); err != nil {
-		fmt.Printf("Failed to start Telegram listener: %v\n", err)
+		logger.GetLogger().Errorf("Failed to start Telegram listener: %v", err)
 		return
 	}
 

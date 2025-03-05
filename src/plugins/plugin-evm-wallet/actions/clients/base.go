@@ -468,7 +468,7 @@ func (c *BaseClient) TransferERC20Token(ctx context.Context, input *ERC20TokenTr
 	// if err != nil {
 	// 	return nil, fmt.Errorf("failed to encode transaction: %w", err)
 	// }
-	// fmt.Println("sending transaction", signedTx.Hash().Hex(), hexTx)
+	//logger.GetLogger().Infoln("sending transaction", signedTx.Hash().Hex(), hexTx)
 
 	// Send transaction
 	err = c.client.SendTransaction(ctx, signedTx)

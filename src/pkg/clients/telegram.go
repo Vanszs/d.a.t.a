@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/carv-protocol/d.a.t.a/src/internal/conf"
+	"github.com/carv-protocol/d.a.t.a/src/pkg/logger"
 	"time"
 
 	telegram "github.com/go-telegram-bot-api/telegram-bot-api/v5"
@@ -156,7 +157,7 @@ func (c *TelegramClient) HandleCommand(command string, handler func(TelegramMess
 		for msg := range c.msgChan {
 			if msg.IsCommand && msg.Command == command {
 				if err := handler(msg); err != nil {
-					fmt.Printf("Error handling command %s: %v\n", command, err)
+					logger.GetLogger().Errorf("Error handling command %s: %v", command, err)
 				}
 			}
 		}

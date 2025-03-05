@@ -2,9 +2,9 @@ package conf
 
 import (
 	"fmt"
+	"github.com/carv-protocol/d.a.t.a/src/pkg/logger"
 	"github.com/pkg/errors"
 	"github.com/spf13/viper"
-	"log"
 	"strings"
 )
 
@@ -169,9 +169,9 @@ func loadYamlConfig(confPath string) error {
 		if !errors.As(err, &viper.ConfigFileNotFoundError{}) {
 			return fmt.Errorf("error reading config file: %w", err)
 		}
-		log.Printf("No config file found, using defaults")
+		logger.GetLogger().Infoln("No config file found, using defaults")
 	} else {
-		log.Printf("Loaded config from file: %s", viper.ConfigFileUsed())
+		logger.GetLogger().Infof("Loaded config from file: %s", viper.ConfigFileUsed())
 	}
 
 	return nil
@@ -270,7 +270,7 @@ func loadDefaultTemplates(configPath string) (*PromptTemplates, error) {
 func validateConfig(conf *Config, confPath string) error {
 	// Check if user templates are defined, if not load default templates
 	if conf.UserTemplates == nil {
-		log.Printf("User templates not defined, loading default templates")
+		logger.GetLogger().Infoln("User templates not defined, loading default templates")
 		defaultTemplates, err := loadDefaultTemplates(confPath)
 		if err != nil {
 			return fmt.Errorf("failed to load default templates: %w", err)
@@ -278,7 +278,7 @@ func validateConfig(conf *Config, confPath string) error {
 		conf.DefaultTemplates = defaultTemplates
 		conf.UserTemplates = conf.DefaultTemplates
 	} else {
-		log.Printf("Using user-defined templates")
+		logger.GetLogger().Infoln("Using user-defined templates")
 	}
 
 	if conf.LLMConfig.APIKey == "" {

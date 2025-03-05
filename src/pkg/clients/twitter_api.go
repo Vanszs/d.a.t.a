@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/carv-protocol/d.a.t.a/src/internal/conf"
+	"github.com/carv-protocol/d.a.t.a/src/pkg/logger"
 	"time"
 
 	"github.com/michimani/gotwi"
@@ -164,7 +165,7 @@ func (t *TwitterOauth) Tweet(ctx context.Context, tweet string) error {
 
 	_, err := managetweet.Create(ctx, t.client, p)
 	if err != nil {
-		fmt.Println(err.Error())
+		logger.GetLogger().Errorln(err.Error())
 		return err
 	}
 	return nil
@@ -264,7 +265,7 @@ func newTwitterAPIClient(twitterConfig *conf.TwitterConfig) (*TwitterOauth, erro
 
 	c, err := gotwi.NewClient(in)
 	if err != nil {
-		fmt.Println(err)
+		logger.GetLogger().Errorln(err)
 		return nil, err
 	}
 
