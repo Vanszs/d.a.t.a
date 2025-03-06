@@ -71,9 +71,9 @@ func initializeAgent(ctx context.Context, config *conf.Config) (*core.Agent, err
 	// Setup database
 	var store database.Store
 	switch config.Database.Type {
-	case "postgres":
+	case conf.DatabasePostgres:
 		store = adapters.NewPostgresStore(config.Database.Path)
-	case "sqlite":
+	case conf.DatabaseSqlite:
 		store = adapters.NewSQLiteStore(config.Database.Path)
 	default:
 		return nil, fmt.Errorf("unknown database type: %s", config.Database.Type)
@@ -86,7 +86,10 @@ func initializeAgent(ctx context.Context, config *conf.Config) (*core.Agent, err
 	// Initialize components
 	llmClient := llm.NewClient((*conf.LLMConfig)(&config.LLMConfig))
 	carvClient := carv.NewClient(config.Data.CarvConfig.APIKey, config.Data.CarvConfig.BaseURL)
-	memoryManager := memory.NewManager(store)
+	memoryManager, err := memory.NewManager(store)
+	if err != nil {
+		return nil, fmt.Errorf("failed to new manager: %w", err)
+	}
 	tokenManager := token.NewTokenManager(carvClient, &core.TokenInfo{
 		Network:      config.Token.Network,
 		Ticker:       config.Token.Ticker,
