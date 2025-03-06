@@ -50,7 +50,7 @@ func (d *Tracer) Trace(ctx context.Context, begin time.Time, fc func() (sql stri
 		sql, rows := fc()
 		d.logger.Warnf("[%.3fms] [rows:%v] %s", float64(elapsed.Nanoseconds())/1e6, rows, sql)
 	default:
-		sql, rows := fc()
-		d.logger.Infof("[%.3fms] [rows:%v] %s", float64(elapsed.Nanoseconds())/1e6, rows, sql)
+		//sql, rows := fc()
+		//d.logger.Infof("[%.3fms] [rows:%v] %s", float64(elapsed.Nanoseconds())/1e6, rows, sql)
 	}
 }

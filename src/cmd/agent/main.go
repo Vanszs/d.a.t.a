@@ -98,7 +98,7 @@ func initializeAgent(ctx context.Context, config *conf.Config) (*core.Agent, err
 	stakeholderManager := token.NewStakeholderManager(memoryManager)
 
 	// Load character
-	character, err := characters.LoadFromFile(config.Character.Path)
+	character, err := characters.NewCharacter(config.Character, store)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load character: %w", err)
 	}

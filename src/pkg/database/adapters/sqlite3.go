@@ -64,6 +64,10 @@ func (s *SQLiteStore) MemoryTable() *gorm.DB {
 	return s.db.Table("memory")
 }
 
+func (s *SQLiteStore) CharacterTable() *gorm.DB {
+	return s.db.Table("character")
+}
+
 func (s *SQLiteStore) Close() error {
 	if s.db != nil {
 		sqlDB, err := s.db.DB()

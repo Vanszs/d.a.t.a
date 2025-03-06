@@ -74,6 +74,10 @@ func (s *PostgresStore) MemoryTable() *gorm.DB {
 	return s.db.Table("data_framework.memory")
 }
 
+func (s *PostgresStore) CharacterTable() *gorm.DB {
+	return s.db.Table("data_framework.character")
+}
+
 func (s *PostgresStore) Close() error {
 	if s.db != nil {
 		sqlDB, err := s.db.DB()

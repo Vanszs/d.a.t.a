@@ -1,6 +1,7 @@
 character:
   # Path to character configuration file
   path: "./src/config/character_data_agent.json"
+  name: "Love Oracle"
 
 database:
   # Database type: "sqlite" or "postgres"
