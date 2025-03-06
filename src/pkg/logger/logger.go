@@ -6,7 +6,7 @@ import "go.uber.org/zap"
 
 var log *zap.SugaredLogger
 
-func Init() {
+func init() {
 	logger, _ := zap.NewProduction()
 	log = logger.Sugar()
 }

@@ -38,8 +38,6 @@ func init() {
 func main() {
 	flag.Parse()
 
-	logger.Init()
-
 	// Create a cancellable context
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
