@@ -2,6 +2,7 @@ package core
 
 import (
 	"fmt"
+	"github.com/carv-protocol/d.a.t.a/src/internal/conf"
 	"time"
 
 	"github.com/carv-protocol/d.a.t.a/src/characters"
@@ -20,7 +21,7 @@ type AgentConfig struct {
 	Stakeholders    StakeholderManager
 	TokenManager    TokenManager
 	SocialClient    SocialClient
-	PromptTemplates *PromptTemplates
+	PromptTemplates *conf.PromptTemplates
 	PluginRegistry  *plugins.Registry
 	Training        struct {
 		Enabled       bool

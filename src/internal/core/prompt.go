@@ -2,6 +2,7 @@ package core
 
 import (
 	"fmt"
+	"github.com/carv-protocol/d.a.t.a/src/internal/conf"
 	"strings"
 	"unicode"
 
@@ -9,63 +10,35 @@ import (
 	"github.com/carv-protocol/d.a.t.a/src/internal/plugins"
 )
 
-type ThoughtStepType string
-
-const (
-	ThoughtStepTypeTask   ThoughtStepType = "task"
-	ThoughtStepTypeAction ThoughtStepType = "action"
-)
-
-type PromptTemplates struct {
-	System struct {
-		BaseTemplate string            `mapstructure:"base_template"`
-		InfoFormat   map[string]string `mapstructure:"info_format"`
-	} `mapstructure:"system"`
-
-	Message struct {
-		Analysis string `mapstructure:"analysis"`
-		Action   string `mapstructure:"action"`
-	} `mapstructure:"message"`
-
-	ThoughtSteps map[ThoughtStepType]struct {
-		Initial     string `mapstructure:"initial"`
-		Exploration string `mapstructure:"exploration"`
-		Analysis    string `mapstructure:"analysis"`
-		Reconsider  string `mapstructure:"reconsider"`
-		Refinement  string `mapstructure:"refinement"`
-		Concrete    string `mapstructure:"concrete"`
-	} `mapstructure:"thought_steps"`
-}
-
-func generateTasksPromptFunc(systemState *SystemState, promptTemplate *PromptTemplates) promptGeneratorFunc {
+func generateTasksPromptFunc(systemState *SystemState, promptTemplate *conf.PromptTemplates) promptGeneratorFunc {
 	return func(stepPurpose StepPurpose, steps []*ThoughtStep) string {
 		switch stepPurpose {
 		case PurposeInitial:
 			return fmt.Sprintf(
-				promptTemplate.ThoughtSteps[ThoughtStepTypeTask].Initial,
+				promptTemplate.ThoughtSteps[conf.ThoughtStepTypeTask].Initial,
 				systemState.Character.Name,
 			)
 		case PurposeAnalysis:
 			// Purpose Analysis: Evaluate the tasks that have been generated to assess their feasibility, risks, and alignment with goals.
 			return fmt.Sprintf(
-				promptTemplate.ThoughtSteps[ThoughtStepTypeTask].Analysis,
+				promptTemplate.ThoughtSteps[conf.ThoughtStepTypeTask].Analysis,
 				formatPreviousSteps(steps),
 			)
 		case PurposeReconsider:
 			return fmt.Sprintf(
-				promptTemplate.ThoughtSteps[ThoughtStepTypeTask].Reconsider,
+				promptTemplate.ThoughtSteps[conf.ThoughtStepTypeTask].Reconsider,
 				formatPreviousSteps(steps),
 			)
 		case PurposeRefinement:
 			// Purpose Refinement: Improve and polish the tasks based on analysis and feedback.
 			return fmt.Sprintf(
-				promptTemplate.ThoughtSteps[ThoughtStepTypeTask].Refinement,
+				promptTemplate.ThoughtSteps[conf.ThoughtStepTypeTask].Refinement,
 				formatPreviousSteps(steps),
 			)
 		case PurposeConcrete:
 			// Purpose Concrete: Finalize the tasks into fully executable plans with precise actions.
 			return fmt.Sprintf(
-				promptTemplate.ThoughtSteps[ThoughtStepTypeTask].Refinement,
+				promptTemplate.ThoughtSteps[conf.ThoughtStepTypeTask].Refinement,
 				formatPreviousSteps(steps),
 			)
 		}
@@ -73,7 +46,7 @@ func generateTasksPromptFunc(systemState *SystemState, promptTemplate *PromptTem
 	}
 }
 
-func generateActionsPromptFunc(systemState *SystemState, actions []actions.IAction, prompts *PromptTemplates) promptGeneratorFunc {
+func generateActionsPromptFunc(systemState *SystemState, actions []actions.IAction, prompts *conf.PromptTemplates) promptGeneratorFunc {
 	return func(stepPurpose StepPurpose, steps []*ThoughtStep) string {
 		switch stepPurpose {
 		case PurposeInitial:
@@ -84,7 +57,7 @@ func generateActionsPromptFunc(systemState *SystemState, actions []actions.IActi
 			}
 
 			return fmt.Sprintf(
-				prompts.ThoughtSteps[ThoughtStepTypeAction].Initial,
+				prompts.ThoughtSteps[conf.ThoughtStepTypeAction].Initial,
 				actionDescriptions,
 			)
 
@@ -107,7 +80,7 @@ func formatMap(data map[string]interface{}) string {
 	return result
 }
 
-func buildMessagePrompt(state *SystemState, msg *SocialMessage, stakeholder *Stakeholder, prompts *PromptTemplates) string {
+func buildMessagePrompt(state *SystemState, msg *SocialMessage, stakeholder *Stakeholder, prompts *conf.PromptTemplates) string {
 	template := prompts.Message.Analysis
 	return fmt.Sprintf(
 		template,
@@ -121,7 +94,7 @@ func buildMessagePrompt(state *SystemState, msg *SocialMessage, stakeholder *Sta
 	)
 }
 
-func buildSystemPrompt(state *SystemState, stakeholder *Stakeholder, prompts *PromptTemplates) string {
+func buildSystemPrompt(state *SystemState, stakeholder *Stakeholder, prompts *conf.PromptTemplates) string {
 	// Get prompt templates from config
 	baseTemplate := prompts.System.BaseTemplate
 	infoFormat := prompts.System.InfoFormat
@@ -167,7 +140,7 @@ func formatActions(actions []actions.IAction) string {
 	return result
 }
 
-func generateActionParametersPrompt(state *SystemState, msg *SocialMessage, stakeholder *Stakeholder, action actions.IAction, prompts *PromptTemplates) string {
+func generateActionParametersPrompt(state *SystemState, msg *SocialMessage, stakeholder *Stakeholder, action actions.IAction, prompts *conf.PromptTemplates) string {
 	// Create a prompt that explains all the possible types and asks for structured analysis
 	template := prompts.Message.Action
 

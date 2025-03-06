@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/carv-protocol/d.a.t.a/src/internal/conf"
 	"regexp"
 	"strings"
 	"time"
@@ -36,7 +37,7 @@ type CognitiveEngine struct {
 	minConfidence   float64
 	character       *characters.Character
 	logger          *zap.SugaredLogger
-	promptTemplates *PromptTemplates
+	promptTemplates *conf.PromptTemplates
 }
 
 type CognitiveConfig struct {
@@ -76,7 +77,7 @@ func NewCognitiveEngine(
 	llmClient llm.Client,
 	model string,
 	character *characters.Character,
-	promptTemplates *PromptTemplates,
+	promptTemplates *conf.PromptTemplates,
 ) *CognitiveEngine {
 	return &CognitiveEngine{
 		llm:             llmClient,

@@ -2,16 +2,15 @@ package main
 
 import (
 	"context"
-	"errors"
 	"flag"
 	"fmt"
-	"log"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
 
 	"github.com/carv-protocol/d.a.t.a/src/characters"
+	"github.com/carv-protocol/d.a.t.a/src/internal/conf"
 	"github.com/carv-protocol/d.a.t.a/src/internal/core"
 	"github.com/carv-protocol/d.a.t.a/src/internal/memory"
 	"github.com/carv-protocol/d.a.t.a/src/internal/plugins"
@@ -21,18 +20,14 @@ import (
 	"github.com/carv-protocol/d.a.t.a/src/pkg/database"
 	"github.com/carv-protocol/d.a.t.a/src/pkg/database/adapters"
 	"github.com/carv-protocol/d.a.t.a/src/pkg/llm"
+	"github.com/carv-protocol/d.a.t.a/src/pkg/logger"
 	dataPlugin "github.com/carv-protocol/d.a.t.a/src/plugins/plugin-d.a.t.a"
 	"github.com/carv-protocol/d.a.t.a/src/web"
 
 	"github.com/google/uuid"
 )
 
-// Config validation errors
-var (
-	ErrInvalidLLMConfig = errors.New("invalid LLM configuration")
-	ErrInvalidDBConfig  = errors.New("invalid database configuration")
-	FlagConfig          string
-)
+var FlagConfig string
 
 type pluginFactory func(llmClient llm.Client, config *plugins.Config) (plugins.Plugin, error)
 
@@ -43,28 +38,27 @@ func init() {
 func main() {
 	flag.Parse()
 
+	logger.Init()
+
 	// Create a cancellable context
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// Setup logging
-	log.SetFlags(log.LstdFlags | log.Lshortfile)
-
 	// Load configuration
-	config, err := loadConfig(FlagConfig)
+	config, err := conf.LoadConfig(FlagConfig)
 	if err != nil {
-		log.Fatalf("Failed to load config: %v", err)
+		logger.GetLogger().Fatalf("Failed to load config: %v", err)
 	}
 
 	// Initialize components
 	agent, err := initializeAgent(ctx, config)
 	if err != nil {
-		log.Fatalf("Failed to initialize agent: %v", err)
+		logger.GetLogger().Fatalf("Failed to initialize agent: %v", err)
 	}
 
 	// Start the agent
-	if err := agent.Start(); err != nil {
-		log.Fatalf("Failed to start agent: %v", err)
+	if err = agent.Start(); err != nil {
+		logger.GetLogger().Fatalf("Failed to start agent: %v", err)
 	}
 
 	web.Start(config.Web.Port)
@@ -73,7 +67,7 @@ func main() {
 	<-handleShutdown(ctx, agent, config.Settings.ShutdownTimeout)
 }
 
-func initializeAgent(ctx context.Context, config *Config) (*core.Agent, error) {
+func initializeAgent(ctx context.Context, config *conf.Config) (*core.Agent, error) {
 	// Setup database
 	var store database.Store
 	switch config.Database.Type {
@@ -90,7 +84,7 @@ func initializeAgent(ctx context.Context, config *Config) (*core.Agent, error) {
 	}
 
 	// Initialize components
-	llmClient := llm.NewClient((*llm.LLMConfig)(&config.LLMConfig))
+	llmClient := llm.NewClient((*conf.LLMConfig)(&config.LLMConfig))
 	carvClient := carv.NewClient(config.Data.CarvConfig.APIKey, config.Data.CarvConfig.BaseURL)
 	memoryManager := memory.NewManager(store)
 	tokenManager := token.NewTokenManager(carvClient, &core.TokenInfo{
@@ -139,7 +133,7 @@ func initializeAgent(ctx context.Context, config *Config) (*core.Agent, error) {
 	return agent, nil
 }
 
-func initializePlugins(config *Config) *plugins.Registry {
+func initializePlugins(config *conf.Config) *plugins.Registry {
 	registry := plugins.NewPluginRegistry()
 
 	// Initialize built-in plugins
@@ -156,19 +150,19 @@ func initializePlugins(config *Config) *plugins.Registry {
 
 		// Check dependencies
 		if err := checkPluginDependencies(pluginConfig, config.Plugins); err != nil {
-			log.Printf("Failed to load plugin %s: %v", name, err)
+			logger.GetLogger().Errorf("Failed to load plugin %s: %v", name, err)
 			continue
 		}
 
 		// Get plugin factory
 		factory, exists := builtinPlugins[name]
 		if !exists {
-			log.Printf("Plugin %s not found in built-in plugins", name)
+			logger.GetLogger().Errorf("Plugin %s not found in built-in plugins", name)
 			continue
 		}
 
 		// Create plugin instance
-		plugin, err := factory(llm.NewClient((*llm.LLMConfig)(&config.LLMConfig)), &plugins.Config{
+		plugin, err := factory(llm.NewClient((*conf.LLMConfig)(&config.LLMConfig)), &plugins.Config{
 			Name:        name,
 			Description: pluginConfig.Description,
 			Options:     pluginConfig.Options,
@@ -176,12 +170,12 @@ func initializePlugins(config *Config) *plugins.Registry {
 
 		// Register plugin
 		if err != nil {
-			log.Printf("Failed to register plugin %s: %v", name, err)
+			logger.GetLogger().Errorf("Failed to register plugin %s: %v", name, err)
 			continue
 		}
 
-		if err := registry.Register(plugin); err != nil {
-			log.Printf("Failed to register plugin %s: %v", name, err)
+		if err = registry.Register(plugin); err != nil {
+			logger.GetLogger().Errorf("Failed to register plugin %s: %v", name, err)
 		}
 	}
 
@@ -189,7 +183,7 @@ func initializePlugins(config *Config) *plugins.Registry {
 }
 
 // checkPluginDependencies verifies that all plugin dependencies are enabled
-func checkPluginDependencies(config PluginConfig, plugins map[string]PluginConfig) error {
+func checkPluginDependencies(config conf.PluginConfig, plugins map[string]conf.PluginConfig) error {
 	for _, dep := range config.Dependencies {
 		depConfig, exists := plugins[dep]
 		if !exists {
@@ -209,7 +203,7 @@ func handleShutdown(ctx context.Context, agent *core.Agent, timeoutSeconds int) 
 
 	go func() {
 		<-sigChan
-		log.Println("Shutdown signal received, initiating graceful shutdown...")
+		logger.GetLogger().Infoln("Shutdown signal received, initiating graceful shutdown...")
 
 		// Create shutdown context with timeout
 		shutdownCtx, cancel := context.WithTimeout(ctx, time.Duration(timeoutSeconds)*time.Second)
@@ -218,7 +212,7 @@ func handleShutdown(ctx context.Context, agent *core.Agent, timeoutSeconds int) 
 		web.Stop()
 
 		if err := agent.Shutdown(shutdownCtx); err != nil {
-			log.Printf("Error during shutdown: %v", err)
+			logger.GetLogger().Errorf("Error during shutdown: %v", err)
 		}
 
 		close(done)

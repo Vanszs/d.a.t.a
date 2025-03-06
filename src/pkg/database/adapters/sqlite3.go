@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"github.com/carv-protocol/d.a.t.a/src/pkg/logger"
 	"os"
 	"path/filepath"
 	"strings"
@@ -25,7 +26,7 @@ func NewSQLiteStore(dbPath string) *SQLiteStore {
 
 // Connect establishes connection to the SQLite database
 func (s *SQLiteStore) Connect(ctx context.Context) error {
-	fmt.Println("Connecting to SQLite database...", s.dbPath)
+	logger.GetLogger().Infof("Connecting to SQLite database..., %s", s.dbPath)
 
 	// Ensure the directory exists
 	dir := filepath.Dir(s.dbPath)
