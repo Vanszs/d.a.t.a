@@ -2,9 +2,6 @@ package web
 
 import (
 	"context"
-	"github.com/carv-protocol/d.a.t.a/src/pkg/logger"
-	"github.com/gin-gonic/gin"
-	"go.uber.org/zap"
 	"net"
 	"net/http"
 	"net/http/httputil"
@@ -13,6 +10,11 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/carv-protocol/d.a.t.a/src/pkg/logger"
+
+	"github.com/gin-gonic/gin"
+	"go.uber.org/zap"
 )
 
 var (

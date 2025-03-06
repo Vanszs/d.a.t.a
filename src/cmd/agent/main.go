@@ -4,14 +4,13 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"github.com/carv-protocol/d.a.t.a/src/internal/conf"
-	"github.com/carv-protocol/d.a.t.a/src/pkg/logger"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
 
 	"github.com/carv-protocol/d.a.t.a/src/characters"
+	"github.com/carv-protocol/d.a.t.a/src/internal/conf"
 	"github.com/carv-protocol/d.a.t.a/src/internal/core"
 	"github.com/carv-protocol/d.a.t.a/src/internal/memory"
 	"github.com/carv-protocol/d.a.t.a/src/internal/plugins"
@@ -21,6 +20,7 @@ import (
 	"github.com/carv-protocol/d.a.t.a/src/pkg/database"
 	"github.com/carv-protocol/d.a.t.a/src/pkg/database/adapters"
 	"github.com/carv-protocol/d.a.t.a/src/pkg/llm"
+	"github.com/carv-protocol/d.a.t.a/src/pkg/logger"
 	dataPlugin "github.com/carv-protocol/d.a.t.a/src/plugins/plugin-d.a.t.a"
 	"github.com/carv-protocol/d.a.t.a/src/web"
 
