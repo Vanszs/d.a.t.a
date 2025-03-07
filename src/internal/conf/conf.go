@@ -2,10 +2,12 @@ package conf
 
 import (
 	"fmt"
+	"strings"
+
 	"github.com/carv-protocol/d.a.t.a/src/pkg/logger"
+
 	"github.com/pkg/errors"
 	"github.com/spf13/viper"
-	"strings"
 )
 
 const (
@@ -14,6 +16,9 @@ const (
 
 	ThoughtStepTypeTask   ThoughtStepType = "task"
 	ThoughtStepTypeAction ThoughtStepType = "action"
+
+	DatabasePostgres DatabaseType = "postgres"
+	DatabaseSqlite   DatabaseType = "sqlite"
 )
 
 var (
@@ -24,6 +29,7 @@ var (
 type (
 	TwitterMode     string
 	ThoughtStepType string
+	DatabaseType    string
 )
 
 type LLMConfig struct {
@@ -90,18 +96,21 @@ type PluginConfig struct {
 	Options      map[string]interface{} `mapstructure:"options"`
 }
 
+type Character struct {
+	Name string `mapstructure:"name"`
+	Path string `mapstructure:"path"`
+}
+
 type Config struct {
 	Settings struct {
 		ShutdownTimeout int `mapstructure:"shutdown_timeout"`
 	} `mapstructure:"settings"`
 
-	Character struct {
-		Path string `mapstructure:"path"`
-	} `mapstructure:"character"`
+	Character `mapstructure:"character"`
 
 	Database struct {
-		Type string `mapstructure:"type"`
-		Path string `mapstructure:"path"`
+		Type DatabaseType `mapstructure:"type"`
+		Path string       `mapstructure:"path"`
 	} `mapstructure:"database"`
 
 	LLMConfig `mapstructure:"llm_config"`
