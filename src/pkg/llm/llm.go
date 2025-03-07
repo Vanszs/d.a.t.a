@@ -3,8 +3,8 @@ package llm
 import (
 	"context"
 	"fmt"
-	"github.com/carv-protocol/d.a.t.a/src/internal/conf"
 
+	"github.com/carv-protocol/d.a.t.a/src/internal/conf"
 	"github.com/carv-protocol/d.a.t.a/src/pkg/llm/deepseek"
 	"github.com/carv-protocol/d.a.t.a/src/pkg/llm/openai"
 )

@@ -2,11 +2,11 @@ package core
 
 import (
 	"fmt"
-	"github.com/carv-protocol/d.a.t.a/src/internal/conf"
 	"strings"
 	"unicode"
 
 	"github.com/carv-protocol/d.a.t.a/src/internal/actions"
+	"github.com/carv-protocol/d.a.t.a/src/internal/conf"
 	"github.com/carv-protocol/d.a.t.a/src/internal/plugins"
 )
 

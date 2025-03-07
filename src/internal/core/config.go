@@ -2,10 +2,10 @@ package core
 
 import (
 	"fmt"
-	"github.com/carv-protocol/d.a.t.a/src/internal/conf"
 	"time"
 
 	"github.com/carv-protocol/d.a.t.a/src/characters"
+	"github.com/carv-protocol/d.a.t.a/src/internal/conf"
 	"github.com/carv-protocol/d.a.t.a/src/internal/plugins"
 	"github.com/carv-protocol/d.a.t.a/src/pkg/llm"
 

@@ -4,13 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/carv-protocol/d.a.t.a/src/internal/conf"
 	"regexp"
 	"strings"
 	"time"
 
 	"github.com/carv-protocol/d.a.t.a/src/characters"
 	"github.com/carv-protocol/d.a.t.a/src/internal/actions"
+	"github.com/carv-protocol/d.a.t.a/src/internal/conf"
 	"github.com/carv-protocol/d.a.t.a/src/pkg/llm"
 	"github.com/carv-protocol/d.a.t.a/src/pkg/logger"
 

@@ -3,9 +3,10 @@ package clients
 import (
 	"context"
 	"fmt"
+	"time"
+
 	"github.com/carv-protocol/d.a.t.a/src/internal/conf"
 	"github.com/carv-protocol/d.a.t.a/src/pkg/logger"
-	"time"
 
 	telegram "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )

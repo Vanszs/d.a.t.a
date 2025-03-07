@@ -3,8 +3,9 @@ package clients
 import (
 	"context"
 	"fmt"
-	"github.com/carv-protocol/d.a.t.a/src/internal/conf"
 	"time"
+
+	"github.com/carv-protocol/d.a.t.a/src/internal/conf"
 
 	twitterscraper "github.com/tyxben/twitter-scraper"
 )
