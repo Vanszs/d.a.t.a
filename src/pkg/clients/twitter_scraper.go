@@ -3,10 +3,11 @@ package clients
 import (
 	"context"
 	"fmt"
-	"github.com/carv-protocol/d.a.t.a/src/internal/conf"
 	"time"
 
 	twitterscraper "github.com/tyxben/twitter-scraper"
+
+	"github.com/carv-protocol/d.a.t.a/src/internal/conf"
 )
 
 // TwitterScraper represents a Twitter scraper using browser automation

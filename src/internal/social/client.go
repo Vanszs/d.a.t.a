@@ -3,13 +3,13 @@ package social
 import (
 	"context"
 	"fmt"
-	"github.com/carv-protocol/d.a.t.a/src/internal/conf"
-	"github.com/carv-protocol/d.a.t.a/src/pkg/logger"
 	"sync"
 	"time"
 
+	"github.com/carv-protocol/d.a.t.a/src/internal/conf"
 	"github.com/carv-protocol/d.a.t.a/src/internal/core"
 	"github.com/carv-protocol/d.a.t.a/src/pkg/clients"
+	"github.com/carv-protocol/d.a.t.a/src/pkg/logger"
 )
 
 // SocialClientImpl handles social media interactions and error reporting

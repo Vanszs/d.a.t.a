@@ -4,14 +4,14 @@ import (
 	"context"
 	"fmt"
 
+	"go.uber.org/zap"
+
 	"github.com/carv-protocol/d.a.t.a/src/internal/actions"
 	"github.com/carv-protocol/d.a.t.a/src/internal/plugins"
 	"github.com/carv-protocol/d.a.t.a/src/pkg/llm"
 	"github.com/carv-protocol/d.a.t.a/src/pkg/logger"
 	walletactions "github.com/carv-protocol/d.a.t.a/src/plugins/plugin-d.a.t.a/actions"
 	"github.com/carv-protocol/d.a.t.a/src/plugins/plugin-d.a.t.a/providers"
-
-	"go.uber.org/zap"
 )
 
 // Required configuration keys
