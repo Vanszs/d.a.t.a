@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"time"
 
-	twitterscraper "github.com/tyxben/twitter-scraper"
-
 	"github.com/carv-protocol/d.a.t.a/src/internal/conf"
+
+	twitterscraper "github.com/tyxben/twitter-scraper"
 )
 
 // TwitterScraper represents a Twitter scraper using browser automation

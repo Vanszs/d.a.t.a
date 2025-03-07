@@ -3,9 +3,9 @@ package web
 import (
 	"net/http"
 
-	"github.com/gin-gonic/gin"
-
 	"github.com/carv-protocol/d.a.t.a/src/web/proto"
+
+	"github.com/gin-gonic/gin"
 )
 
 func Healthy(c *gin.Context) {

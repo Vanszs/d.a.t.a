@@ -5,6 +5,9 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/carv-protocol/d.a.t.a/src/internal/conf"
+	"github.com/carv-protocol/d.a.t.a/src/pkg/logger"
+
 	"github.com/michimani/gotwi"
 	"github.com/michimani/gotwi/fields"
 	"github.com/michimani/gotwi/resources"
@@ -14,9 +17,6 @@ import (
 	searchTypes "github.com/michimani/gotwi/tweet/searchtweet/types"
 	"github.com/michimani/gotwi/user/userlookup"
 	"github.com/michimani/gotwi/user/userlookup/types"
-
-	"github.com/carv-protocol/d.a.t.a/src/internal/conf"
-	"github.com/carv-protocol/d.a.t.a/src/pkg/logger"
 )
 
 // Interface defines the contract

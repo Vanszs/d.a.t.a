@@ -9,8 +9,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/google/uuid"
-
 	"github.com/carv-protocol/d.a.t.a/src/characters"
 	"github.com/carv-protocol/d.a.t.a/src/internal/conf"
 	"github.com/carv-protocol/d.a.t.a/src/internal/core"
@@ -25,6 +23,8 @@ import (
 	"github.com/carv-protocol/d.a.t.a/src/pkg/logger"
 	dataPlugin "github.com/carv-protocol/d.a.t.a/src/plugins/plugin-d.a.t.a"
 	"github.com/carv-protocol/d.a.t.a/src/web"
+
+	"github.com/google/uuid"
 )
 
 var FlagConfig string

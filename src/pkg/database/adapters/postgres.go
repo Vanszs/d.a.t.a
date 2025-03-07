@@ -5,13 +5,13 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/carv-protocol/d.a.t.a/src/pkg/database"
+	"github.com/carv-protocol/d.a.t.a/src/pkg/logger"
+
 	"github.com/gozelus/gormotel"
 	_ "github.com/lib/pq"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
-
-	"github.com/carv-protocol/d.a.t.a/src/pkg/database"
-	"github.com/carv-protocol/d.a.t.a/src/pkg/logger"
 )
 
 const (

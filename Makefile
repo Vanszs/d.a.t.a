@@ -56,7 +56,10 @@ gci:
 		echo "gci not found, installing..."; \
 		$(MAKE) gci-install; \
 	fi
-	@find . -name "*.go" -not -path "./vendor/*" | xargs $(GCI) write --skip-generated -s standard -s "prefix(github.com/carv-protocol/d.a.t.a)" -s default
+	@echo "Using gci: $(GCI)"
+	@$(GCI) --version
+	@find . -name "*.go" -not -path "./vendor/*" -print0 | xargs -0 $(GCI) write --skip-generated -s "standard" -s "prefix(github.com/carv-protocol/d.a.t.a)" -s "default" --custom-order
+	@echo "✅ Import formatting completed"
 
 # Install gci
 gci-install:

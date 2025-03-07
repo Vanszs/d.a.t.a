@@ -11,10 +11,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/carv-protocol/d.a.t.a/src/pkg/logger"
+
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
-
-	"github.com/carv-protocol/d.a.t.a/src/pkg/logger"
 )
 
 var (

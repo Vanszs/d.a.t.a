@@ -6,12 +6,12 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/carv-protocol/d.a.t.a/src/pkg/database"
+	"github.com/carv-protocol/d.a.t.a/src/pkg/logger"
+
 	_ "github.com/mattn/go-sqlite3"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
-
-	"github.com/carv-protocol/d.a.t.a/src/pkg/database"
-	"github.com/carv-protocol/d.a.t.a/src/pkg/logger"
 )
 
 type SQLiteStore struct {

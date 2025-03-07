@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"time"
 
-	telegram "github.com/go-telegram-bot-api/telegram-bot-api/v5"
-
 	"github.com/carv-protocol/d.a.t.a/src/internal/conf"
 	"github.com/carv-protocol/d.a.t.a/src/pkg/logger"
+
+	telegram "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
 
 // TelegramMessage represents a message structure

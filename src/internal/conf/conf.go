@@ -4,10 +4,10 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/carv-protocol/d.a.t.a/src/pkg/logger"
+
 	"github.com/pkg/errors"
 	"github.com/spf13/viper"
-
-	"github.com/carv-protocol/d.a.t.a/src/pkg/logger"
 )
 
 const (
