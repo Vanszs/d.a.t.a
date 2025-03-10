@@ -8,8 +8,6 @@ import (
 )
 
 func main() {
-	logger.Init()
-
 	ctx := context.Background()
 
 	// Initialize database connection
