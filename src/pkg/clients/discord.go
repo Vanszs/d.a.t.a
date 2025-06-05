@@ -2,6 +2,7 @@ package clients
 
 import (
 	"context"
+	"strings"
 
 	"github.com/bwmarrin/discordgo"
 )
@@ -56,9 +57,14 @@ func MessageListener(
 		}
 
 		if shouldReact(discord.State.User, channel, message) {
+			content := strings.TrimSpace(message.Content)
+			if strings.HasPrefix(content, "!ask") {
+				content = strings.TrimSpace(strings.TrimPrefix(content, "!ask"))
+			}
+
 			msgChannel <- DiscordMsg{
 				AuthorID:  message.Author.ID,
-				Content:   message.Content,
+				Content:   content,
 				ChannelID: message.ChannelID,
 			}
 		}
@@ -88,6 +94,11 @@ func shouldReact(
 		if mention.ID == me.ID {
 			return true
 		}
+	}
+
+	/* react to commands that start with !ask */
+	if strings.HasPrefix(strings.TrimSpace(message.Content), "!ask") {
+		return true
 	}
 
 	return false

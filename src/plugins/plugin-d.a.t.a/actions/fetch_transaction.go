@@ -61,7 +61,39 @@ func (a *FetchTransactionAction) ParametersPrompt() string {
 }
 
 func (a *FetchTransactionAction) Validate(params map[string]interface{}) error {
-	// TODO: validate the parameters
+	// message is required for generating the query
+	if _, ok := params["message"].(string); !ok {
+		return fmt.Errorf("message parameter is required")
+	}
+
+	// optional parameters are validated using ValidateParams
+	if err := a.ValidateParams(params); err != nil {
+		return err
+	}
+
+	// validate limit if provided
+	if v, ok := params["limit"].(int); ok {
+		if v <= 0 || v > 1000 {
+			return fmt.Errorf("limit must be between 1 and 1000")
+		}
+	}
+
+	// check date range if both provided
+	startStr, sOK := params["startDate"].(string)
+	endStr, eOK := params["endDate"].(string)
+	if sOK && eOK {
+		startT, err := time.Parse(time.RFC3339, startStr)
+		if err != nil {
+			return fmt.Errorf("invalid start date format: %w", err)
+		}
+		endT, err := time.Parse(time.RFC3339, endStr)
+		if err != nil {
+			return fmt.Errorf("invalid end date format: %w", err)
+		}
+		if startT.After(endT) {
+			return fmt.Errorf("startDate must be before endDate")
+		}
+	}
 
 	return nil
 }
