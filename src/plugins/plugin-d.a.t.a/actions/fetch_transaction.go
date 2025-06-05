@@ -20,6 +20,7 @@ type FetchTransactionAction struct {
 	dbProvider  types.DatabaseProvider
 	examples    []string
 	similes     []string
+	lastResult  string
 }
 
 // NewFetchTransactionAction creates a new fetch transaction action
@@ -133,13 +134,10 @@ func (a *FetchTransactionAction) ExecuteWithParams(ctx context.Context, query st
 
 	// 2. analyze the result
 	analysis, err := a.dbProvider.AnalyzeQuery(ctx, result)
-	if err != nil {
-		// if the analysis failed, still return the original result
-		return nil
+	if err == nil {
+		// 3. add the analysis result
+		result.Analysis = analysis
 	}
-
-	// 3. add the analysis result
-	result.Analysis = analysis
 
 	// 4. add query details to metadata
 	result.Metadata.QueryDetails = &struct {
@@ -148,6 +146,9 @@ func (a *FetchTransactionAction) ExecuteWithParams(ctx context.Context, query st
 	}{
 		Query: query,
 	}
+
+	// 5. store formatted result for retrieval by the agent
+	a.lastResult = FormatQueryResult(result)
 
 	return nil
 }
@@ -343,4 +344,9 @@ func FormatQueryResult(result *types.TransactionQueryResult) string {
 	}
 
 	return builder.String()
+}
+
+// LastResult returns the last formatted query result
+func (a *FetchTransactionAction) LastResult() string {
+	return a.lastResult
 }

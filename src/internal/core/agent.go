@@ -158,7 +158,25 @@ func (a *Agent) monitorSocialInputs() {
 // executeAction executes a generic action
 func (a *Agent) executeAction(ctx context.Context, action actions.IAction, params map[string]interface{}) error {
 	a.logger.Infow("Executing action", "type", action.Type(), "params", params)
-	return action.Execute(ctx, params)
+	err := action.Execute(ctx, params)
+	if err != nil {
+		return err
+	}
+
+	if rp, ok := action.(actions.ResultProvider); ok {
+		res := rp.LastResult()
+		if res != "" {
+			meta, _ := params["metadata"].(map[string]interface{})
+			platform, _ := params["platform"].(string)
+			a.socialClient.SendMessage(ctx, SocialMessage{
+				Platform: platform,
+				Type:     "Response",
+				Content:  res,
+				Metadata: meta,
+			})
+		}
+	}
+	return nil
 }
 
 func (a *Agent) processMessage(msg *SocialMessage) error {
@@ -230,6 +248,14 @@ func (a *Agent) processMessage(msg *SocialMessage) error {
 				a.logger.Errorw("Error generating action parameters", "error", err)
 				return err
 			}
+
+			// include message metadata so actions can respond
+			if params == nil {
+				params = map[string]interface{}{}
+			}
+			params["metadata"] = msg.Metadata
+			params["platform"] = msg.Platform
+			params["from_user"] = msg.FromUser
 
 			if moreInfoNeeded, ok := params["more_info_needed"].(bool); ok && moreInfoNeeded {
 				a.logger.Infof("More info needed, relying on message: %s", params["rely_message"])

@@ -15,6 +15,12 @@ type IAction interface {
 	ParametersPrompt() string
 }
 
+// ResultProvider allows actions to expose an output string after execution
+// so the agent can relay results back to the user.
+type ResultProvider interface {
+	LastResult() string
+}
+
 // ActionManager is an interface for managing actions
 type ActionManager interface {
 	Register(action IAction) error
