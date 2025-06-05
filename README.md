@@ -99,4 +99,4 @@ make run
 - [GitHub Issues](https://github.com/carv-protocol/d.a.t.a/issues)
 - [Discord Community](https://discord.gg/gjK2BJhHWN)
 - [Documentation](https://docs.carv.io/d.a.t.a.-ai-framework/introduction)
-- Email: developer@carv.io
+- Email: developer@carv.i

@@ -11,10 +11,14 @@ import (
 	"github.com/michimani/gotwi"
 	"github.com/michimani/gotwi/fields"
 	"github.com/michimani/gotwi/resources"
+	like "github.com/michimani/gotwi/tweet/like"
+	likeTypes "github.com/michimani/gotwi/tweet/like/types"
 	"github.com/michimani/gotwi/tweet/managetweet"
 	manageTypes "github.com/michimani/gotwi/tweet/managetweet/types"
 	"github.com/michimani/gotwi/tweet/searchtweet"
 	searchTypes "github.com/michimani/gotwi/tweet/searchtweet/types"
+	tweetlookup "github.com/michimani/gotwi/tweet/tweetlookup"
+	tweetlookupTypes "github.com/michimani/gotwi/tweet/tweetlookup/types"
 	"github.com/michimani/gotwi/user/userlookup"
 	"github.com/michimani/gotwi/user/userlookup/types"
 )
@@ -194,9 +198,53 @@ func (t *TwitterOauth) ReplyToTweet(ctx context.Context, replyText, replyToTweet
 
 // GetTweetByID retrieves a specific tweet by its ID
 func (t *TwitterOauth) GetTweetByID(ctx context.Context, tweetID string) (*Tweet, error) {
-	// Implementation for getting a specific tweet
-	// TODO: Implement using gotwi library
-	return nil, nil
+	p := &tweetlookupTypes.GetInput{
+		ID: tweetID,
+		TweetFields: fields.TweetFieldList{
+			fields.TweetFieldAuthorID,
+			fields.TweetFieldCreatedAt,
+			fields.TweetFieldText,
+			fields.TweetFieldPublicMetrics,
+		},
+	}
+
+	resp, err := tweetlookup.Get(ctx, t.client, p)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get tweet: %w", err)
+	}
+
+	data := resp.Data
+	if data.ID == nil {
+		return nil, fmt.Errorf("tweet not found")
+	}
+
+	tw := &Tweet{
+		ID:     *data.ID,
+		Text:   gotwi.StringValue(data.Text),
+		UserID: gotwi.StringValue(data.AuthorID),
+	}
+
+	if data.CreatedAt != nil {
+		tw.CreatedAt = *data.CreatedAt
+	}
+
+	if data.PublicMetrics != nil {
+		tw.Metrics = &TweetMetrics{}
+		if data.PublicMetrics.LikeCount != nil {
+			tw.Metrics.LikeCount = int(*data.PublicMetrics.LikeCount)
+		}
+		if data.PublicMetrics.RetweetCount != nil {
+			tw.Metrics.RetweetCount = int(*data.PublicMetrics.RetweetCount)
+		}
+		if data.PublicMetrics.ReplyCount != nil {
+			tw.Metrics.ReplyCount = int(*data.PublicMetrics.ReplyCount)
+		}
+		if data.PublicMetrics.QuoteCount != nil {
+			tw.Metrics.QuoteCount = int(*data.PublicMetrics.QuoteCount)
+		}
+	}
+
+	return tw, nil
 }
 
 // DeleteTweet deletes a tweet by its ID
@@ -215,7 +263,16 @@ func (t *TwitterOauth) DeleteTweet(ctx context.Context, tweetID string) error {
 
 // LikeTweet likes a specific tweet
 func (t *TwitterOauth) LikeTweet(ctx context.Context, tweetID string) error {
-	// TODO: Implement using gotwi library
+	p := &likeTypes.CreateInput{
+		ID:      t.GetMe(),
+		TweetID: tweetID,
+	}
+
+	_, err := like.Create(ctx, t.client, p)
+	if err != nil {
+		return fmt.Errorf("failed to like tweet: %w", err)
+	}
+
 	return nil
 }
 
